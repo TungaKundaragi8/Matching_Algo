@@ -1,50 +1,42 @@
-
-
 @GetMapping("/run")
 public List<Map<String, Object>> runReconciliation() throws IOException {
-    File algoFile = new File("C:\\Users\\h59283\\Documents\\Initial_Margin_EOD_20250407.csv");
-    File starFile = new File("C:\\Users\\h59283\\Documents\\STARALGONEW_3428_20250407.csv");
+    List<Map<String, Object>> finalResult = new ArrayList<>();
 
-    BufferedReader algoReader = new BufferedReader(new FileReader(algoFile));
-    BufferedReader starReader = new BufferedReader(new FileReader(starFile));
+    // Read both files (algo & star)
+    List<List<String>> algoData = readCsvData(algoFile);
+    List<List<String>> starData = readCsvData(starFile);
 
-    String[] algoHeaders = algoReader.readLine().split(",");
-    String[] starHeaders = starReader.readLine().split(",");
+    // Assume first row contains headers
+    List<String> headers = algoData.get(0);
+    int rowCount = Math.max(algoData.size(), starData.size());
 
-    List<Map<String, Object>> comparisonResult = new ArrayList<>();
-    String algoLine, starLine;
-    int rowNumber = 1;
+    for (int i = 1; i < rowCount; i++) {
+        List<String> algoRow = i < algoData.size() ? algoData.get(i) : new ArrayList<>();
+        List<String> starRow = i < starData.size() ? starData.get(i) : new ArrayList<>();
 
-    while ((algoLine = algoReader.readLine()) != null && (starLine = starReader.readLine()) != null) {
-        String[] algoData = algoLine.split(",");
-        String[] starData = starLine.split(",");
+        List<Map<String, String>> columns = new ArrayList<>();
 
-        Map<String, Object> rowResult = new HashMap<>();
-        rowResult.put("Row", rowNumber++);
+        for (int j = 0; j < headers.size(); j++) {
+            String header = headers.get(j);
+            String algoValue = j < algoRow.size() ? algoRow.get(j) : "Missing";
+            String starValue = j < starRow.size() ? starRow.get(j) : "Missing";
+            String status = algoValue.equals(starValue) ? "Match" : "Mismatch";
 
-        List<Map<String, String>> columnComparisons = new ArrayList<>();
+            Map<String, String> colResult = new HashMap<>();
+            colResult.put("Column", header);
+            colResult.put("ALGO Value", algoValue);
+            colResult.put("STAR Value", starValue);
+            colResult.put("Status", status);
 
-        int maxColumns = Math.max(algoHeaders.length, starHeaders.length);
-        for (int i = 0; i < maxColumns; i++) {
-            String columnName = (i < algoHeaders.length) ? algoHeaders[i] : starHeaders[i];
-            String algoValue = (i < algoData.length) ? algoData[i] : "";
-            String starValue = (i < starData.length) ? starData[i] : "";
-
-            Map<String, String> columnResult = new LinkedHashMap<>();
-            columnResult.put("Column", columnName);
-            columnResult.put("ALGO Value", algoValue);
-            columnResult.put("STAR Value", starValue);
-            columnResult.put("Status", algoValue.equals(starValue) ? "Match" : "Mismatch");
-
-            columnComparisons.add(columnResult);
+            columns.add(colResult);
         }
 
-        rowResult.put("Columns", columnComparisons);
-        comparisonResult.add(rowResult);
+        Map<String, Object> rowResult = new HashMap<>();
+        rowResult.put("Row", i);
+        rowResult.put("Columns", columns);
+
+        finalResult.add(rowResult);
     }
 
-    algoReader.close();
-    starReader.close();
-
-    return comparisonResult;
+    return finalResult;
 }
