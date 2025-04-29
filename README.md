@@ -1,3 +1,7 @@
+
+
+
+
 @GetMapping("/run")
 public ResponseEntity<Map<String, Object>> runReconciliation() throws IOException {
     File algoFile = new File("C:\\Practise\\Initial_Margin_EOD_20250307.csv");
@@ -6,80 +10,77 @@ public ResponseEntity<Map<String, Object>> runReconciliation() throws IOExceptio
     List<String[]> algoRows = readCSV(algoFile);
     List<String[]> starRows = readCSV(starFile);
 
-    int agreementNameIndex = getColumnIndex(algoRows.get(0), "Agreement_name");
+    int agreementIndex = getColumnIndex(algoRows.get(0), "Agreement_name");
     int crdsIndex = getColumnIndex(starRows.get(0), "CRDS Party Code");
     int postDirIndex = getColumnIndex(starRows.get(0), "Post Direction");
 
-    Map<String, Integer> algoKeyToIndex = new LinkedHashMap<>();
-    Map<String, List<Integer>> starKeyToIndices = new HashMap<>();
+    Map<String, Integer> algoKeys = new LinkedHashMap<>();
+    Map<String, List<Integer>> starKeys = new HashMap<>();
 
     for (int i = 1; i < algoRows.size(); i++) {
-        String agreement = algoRows.get(i)[agreementNameIndex].trim()
-                .replace("_RIMR", "3CR")
-                .replace("_RIMP", "3CP")
-                .replaceAll("\\s", "");
-
-        algoKeyToIndex.put(agreement, i);
+        String agreement = algoRows.get(i)[agreementIndex].trim();
+        String suffix = agreement.endsWith("_RIMR") ? "3CR" :
+                        agreement.endsWith("_RIMP") ? "3CP" : "UNKNOWN";
+        String algoKey = agreement.replace("_RIMR", "").replace("_RIMP", "").replaceAll("\\s", "") + suffix;
+        algoKeys.put(algoKey, i);
     }
 
     for (int i = 1; i < starRows.size(); i++) {
         String crds = starRows.get(i)[crdsIndex].trim().replaceAll("\\s", "");
         String post = starRows.get(i)[postDirIndex].trim().replaceAll("\\s", "");
-        String key = crds + "3" + post;
-
-        starKeyToIndices.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
+        String starKey = crds + post;
+        starKeys.computeIfAbsent(starKey, k -> new ArrayList<>()).add(i);
     }
 
-    List<Map<String, String>> result = new ArrayList<>();
+    List<Map<String, String>> results = new ArrayList<>();
     Set<Integer> matchedStarIndices = new HashSet<>();
-    int matchedCount = 0;
-    int unmatchedCount = 0;
+    int matched = 0, unmatched = 0;
 
-    for (Map.Entry<String, Integer> entry : algoKeyToIndex.entrySet()) {
-        String algoKey = entry.getKey();
-        int algoIndex = entry.getValue();
-        List<Integer> starIndices = starKeyToIndices.get(algoKey);
+    for (Map.Entry<String, Integer> entry : algoKeys.entrySet()) {
+        String key = entry.getKey();
+        int algoIdx = entry.getValue();
+        List<Integer> starIdxList = starKeys.getOrDefault(key, new ArrayList<>());
 
         Map<String, String> map = new LinkedHashMap<>();
-        map.put("ALGO Key", algoKey);
+        map.put("ALGO Key", key);
 
-        if (starIndices == null || starIndices.isEmpty()) {
+        if (starIdxList.size() == 1 && !matchedStarIndices.contains(starIdxList.get(0))) {
+            int starIdx = starIdxList.get(0);
+            map.put("STAR Key", key);
+            map.put("Status", "Match");
+            matchedStarIndices.add(starIdx);
+            matched++;
+        } else if (starIdxList.isEmpty()) {
             map.put("STAR Key", "<No Match>");
             map.put("Status", "Mismatch - No STAR entry");
-            unmatchedCount++;
-        } else if (starIndices.size() == 1 && !matchedStarIndices.contains(starIndices.get(0))) {
-            int matchedIndex = starIndices.get(0);
-            map.put("STAR Key", algoKey);
-            map.put("Status", "Match");
-            matchedStarIndices.add(matchedIndex);
-            matchedCount++;
+            unmatched++;
         } else {
-            map.put("STAR Key", algoKey);
+            map.put("STAR Key", key);
             map.put("Status", "Mismatch - Multiple STAR entries or already matched");
-            unmatchedCount++;
+            unmatched++;
         }
 
-        result.add(map);
+        results.add(map);
     }
 
-    for (Map.Entry<String, List<Integer>> entry : starKeyToIndices.entrySet()) {
-        String starKey = entry.getKey();
+    for (Map.Entry<String, List<Integer>> entry : starKeys.entrySet()) {
+        String key = entry.getKey();
         for (int idx : entry.getValue()) {
-            if (!matchedStarIndices.contains(idx) && !algoKeyToIndex.containsKey(starKey)) {
+            if (!matchedStarIndices.contains(idx) && !algoKeys.containsKey(key)) {
                 Map<String, String> map = new LinkedHashMap<>();
                 map.put("ALGO Key", "<No Match>");
-                map.put("STAR Key", starKey);
+                map.put("STAR Key", key);
                 map.put("Status", "Mismatch - STAR entry unmatched");
-                result.add(map);
-                unmatchedCount++;
+                results.add(map);
+                unmatched++;
             }
         }
     }
 
-    Map<String, Object> finalResponse = new LinkedHashMap<>();
-    finalResponse.put("Matched Records", matchedCount);
-    finalResponse.put("Unmatched Records", unmatchedCount);
-    finalResponse.put("Details", result);
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("Matched Records", matched);
+    response.put("Unmatched Records", unmatched);
+    response.put("Details", results);
 
-    return ResponseEntity.ok(finalResponse);
+    return ResponseEntity.ok(response);
 }
