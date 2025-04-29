@@ -1,84 +1,93 @@
-package com.example.demo.controller;
+package com.example.reconciliation.controller;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.HttpStatus;
 
 import java.io.*;
-import java.nio.file.Files;
 import java.util.*;
 
 @RestController
 @RequestMapping("/reconciliation")
 public class ReconciliationController {
 
-    @GetMapping("/run")
-    public ResponseEntity<List<Map<String, Object>>> runReconciliation() throws IOException {
-        File algoFile = new File("C:\\Practise\\Initial_Margin_EOD_20250307.csv");
-        File starFile = new File("C:\\Practise\\STARGALGONEW_3428_20250307_1.csv");
+    @PostMapping("/upload")
+    public ResponseEntity<List<Map<String, Object>>> uploadAndReconcile(
+            @RequestParam("algoFile") MultipartFile algoFile,
+            @RequestParam("starFile") MultipartFile starFile) {
 
-        List<String[]> algoRows = readCSV(algoFile);
-        List<String[]> starRows = readCSV(starFile);
+        try {
+            List<String[]> algoRows = readCSV(algoFile);
+            List<String[]> starRows = readCSV(starFile);
 
-        if (algoRows.isEmpty() || starRows.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(List.of(Map.of("error", "One or both CSV files are empty or missing")));
-        }
+            if (algoRows.isEmpty() || starRows.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(List.of(Map.of("error", "One or both files are empty")));
+            }
 
-        int agreementNameIndex = getColumnIndex(algoRows.get(0), "Agreement_name");
-        int crdsCodeIndex = getColumnIndex(starRows.get(0), "CRDS Party Code");
+            int agreementIndex = getColumnIndex(algoRows.get(0), "Agreement_name");
+            int crdsIndex = getColumnIndex(starRows.get(0), "CRDS Party Code");
 
-        if (agreementNameIndex == -1 || crdsCodeIndex == -1) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(List.of(Map.of("error", "Required column not found in one or both files")));
-        }
+            if (agreementIndex == -1 || crdsIndex == -1) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(List.of(Map.of("error", "Required columns not found")));
+            }
 
-        List<Map<String, Object>> result = new ArrayList<>();
+            List<Map<String, Object>> results = new ArrayList<>();
+            Set<Integer> matchedStarIndices = new HashSet<>();
 
-        for (int i = 1; i < algoRows.size(); i++) {
-            String[] algoRow = algoRows.get(i);
-            if (agreementNameIndex >= algoRow.length) continue;
+            for (int i = 1; i < algoRows.size(); i++) {
+                String[] algoRow = algoRows.get(i);
+                if (agreementIndex >= algoRow.length) continue;
 
-            String agreementName = algoRow[agreementNameIndex];
-            String transformedCrdsName = null;
-            String[] matchingStarRow = null;
+                String agreementName = algoRow[agreementIndex].trim();
+                String expectedSuffix = getExpectedCrdsSuffix(agreementName);
+                String[] matchedStar = null;
+                String matchedCrds = null;
 
-            // Search in STAR file
-            for (String[] starRow : starRows) {
-                if (crdsCodeIndex >= starRow.length) continue;
-                String crdsName = starRow[crdsCodeIndex];
-                transformedCrdsName = applyTransformations(agreementName, crdsName);
+                for (int j = 1; j < starRows.size(); j++) {
+                    if (matchedStarIndices.contains(j)) continue;
 
-                if (transformedCrdsName.equals(agreementName)) {
-                    matchingStarRow = starRow;
-                    break;
+                    String[] starRow = starRows.get(j);
+                    if (crdsIndex >= starRow.length) continue;
+
+                    String crdsPartyCode = starRow[crdsIndex].trim();
+
+                    if (crdsPartyCode.endsWith(expectedSuffix)) {
+                        matchedStar = starRow;
+                        matchedCrds = crdsPartyCode;
+                        matchedStarIndices.add(j);
+                        break;
+                    }
                 }
+
+                Map<String, Object> map = new LinkedHashMap<>();
+                map.put("Agreement Name", agreementName);
+                map.put("Expected CRDS Suffix", expectedSuffix);
+                map.put("Matched CRDS", matchedCrds != null ? matchedCrds : "No Match");
+                map.put("Match Status", matchedStar != null ? "Match" : "No Match");
+                if (matchedStar != null) {
+                    map.put("Matched STAR Row", Arrays.toString(matchedStar));
+                }
+
+                results.add(map);
             }
 
-            Map<String, Object> rowResult = new LinkedHashMap<>();
-            rowResult.put("Agreement Name", agreementName);
-            rowResult.put("Transformed CRDS Name", transformedCrdsName);
-            if (matchingStarRow != null) {
-                rowResult.put("Match Status", "Match");
-                rowResult.put("Matching Row", Arrays.toString(matchingStarRow));
-            } else {
-                rowResult.put("Match Status", "No Match");
-            }
+            return ResponseEntity.ok(results);
 
-            result.add(rowResult);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(List.of(Map.of("error", "Processing failed: " + e.getMessage())));
         }
-
-        return ResponseEntity.ok(result);
     }
 
-    private List<String[]> readCSV(File file) throws IOException {
+    private List<String[]> readCSV(MultipartFile file) throws IOException {
         List<String[]> rows = new ArrayList<>();
-        if (!file.exists()) return rows;
-
-        try (BufferedReader br = Files.newBufferedReader(file.toPath())) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
             String line;
-            while ((line = br.readLine()) != null) {
-                rows.add(line.split(",", -1)); // Preserve empty values
+            while ((line = reader.readLine()) != null) {
+                rows.add(line.split(",", -1));
             }
         }
         return rows;
@@ -86,19 +95,14 @@ public class ReconciliationController {
 
     private int getColumnIndex(String[] headers, String columnName) {
         for (int i = 0; i < headers.length; i++) {
-            if (headers[i].trim().equalsIgnoreCase(columnName)) {
-                return i;
-            }
+            if (headers[i].trim().equalsIgnoreCase(columnName)) return i;
         }
         return -1;
     }
 
-    private String applyTransformations(String agreementName, String crdsName) {
-        if (agreementName.contains("-RIMP") && crdsName.equals("3CR")) {
-            return "3CRP";
-        } else if (agreementName.contains("-RIMP") && crdsName.equals("3CP")) {
-            return "3CPP";
-        }
-        return crdsName;
+    private String getExpectedCrdsSuffix(String agreementName) {
+        if (agreementName.endsWith("_RIMP")) return "_3CP";
+        else if (agreementName.endsWith("_RIMR")) return "_3CR";
+        else return "_UNKNOWN";
     }
 }
