@@ -198,3 +198,25 @@ public List<Record> getUnmatched() { return unmatched; }
 public void setUnmatched(List<Record> unmatched) { this.unmatched = unmatched; }
 
 }
+
+
+
+
+
+
+
+public ReconciliationResult reconcile(String algoPath, String starPath, String matchType) {
+    // Use the matchType value to switch between matching algorithms
+    switch (matchType.toLowerCase()) {
+        case "one-to-one":
+            return oneToOneMatching(algoPath, starPath);
+        case "one-to-many":
+            return oneToManyMatching(algoPath, starPath);
+        case "many-to-one":
+            return manyToOneMatching(algoPath, starPath);
+        case "many-to-many":
+            return manyToManyMatching(algoPath, starPath);
+        default:
+            throw new IllegalArgumentException("Invalid match type");
+    }
+}
