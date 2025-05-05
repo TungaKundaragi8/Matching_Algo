@@ -228,3 +228,151 @@ public class ReconciliationService {
         return new ReconciliationResult(matched, unmatched, Collections.emptyList());
     }
 }
+
+
+
+
+...................................................m
+3. Entity Classes
+
+AlgoRecordEntity.java
+
+package com.example.reconciliation.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "ALGO_RECORDS")
+public class AlgoRecordEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "AGREEMENT_NAME")
+    private String agreementName;
+
+    // Getters and setters
+}
+
+StarRecordEntity.java
+
+package com.example.reconciliation.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "STAR_RECORDS")
+public class StarRecordEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "CRDS_PARTY_CODE")
+    private String crdsPartyCode;
+
+    @Column(name = "POST_DIRECTION")
+    private String postDirection;
+
+    @Column(name = "MATURITY_DATE")
+    private String maturityDate;
+
+    // Getters and setters
+}
+
+
+---
+
+4. Repository Interfaces
+
+AlgoRecordRepository.java
+
+package com.example.reconciliation.repository;
+
+import com.example.reconciliation.entity.AlgoRecordEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AlgoRecordRepository extends JpaRepository<AlgoRecordEntity, Long> {
+}
+
+StarRecordRepository.java
+
+package com.example.reconciliation.repository;
+
+import com.example.reconciliation.entity.StarRecordEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface StarRecordRepository extends JpaRepository<StarRecordEntity, Long> {
+}
+
+
+---
+
+5. Service Update
+
+ReconciliationService.java
+
+Use the same logic you already shared earlier, but replace the reconcile method like this:
+
+@Autowired
+private AlgoRecordRepository algoRepo;
+
+@Autowired
+private StarRecordRepository starRepo;
+
+public ReconciliationResult reconcile(String matchType) {
+    List<AlgoRecordEntity> algoEntities = algoRepo.findAll();
+    List<StarRecordEntity> starEntities = starRepo.findAll();
+
+    List<String> algoKeys = algoEntities.stream()
+            .map(a -> a.getAgreementName()
+                .replace("_RIMR", "3CR")
+                .replace("_RIMP", "3CP")
+                .replaceAll("\\s+", "")
+                .trim())
+            .toList();
+
+    List<String> starKeys = new ArrayList<>();
+    List<StarRecordEntity> filtered = new ArrayList<>();
+    List<StarRecordEntity> excluded = new ArrayList<>();
+
+    for (StarRecordEntity star : starEntities) {
+        if (star.getMaturityDate().toLowerCase().contains("jan 1 1900")) {
+            excluded.add(star);
+        } else {
+            filtered.add(star);
+            starKeys.add(star.getCrdsPartyCode().replaceAll("\\s+", "") +
+                         "3" + star.getPostDirection().replaceAll("\\s+", ""));
+        }
+    }
+
+    // Then pass algoKeys and starKeys to your existing matching logic unchanged
+}
+
+Everything else in your ReconciliationService (matching logic, etc.) can remain as-is.
+
+
+---
+
+6. Controller
+
+package com.example.reconciliation.controller;
+
+import com.example.reconciliation.model.ReconciliationResult;
+import com.example.reconciliation.service.ReconciliationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/reconciliation")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    @GetMapping("/{matchType}")
+    public ReconciliationResult reconcile(@PathVariable String matchType) {
+        return reconciliationService.reconcile(matchType);
+    }
+}
