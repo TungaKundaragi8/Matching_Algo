@@ -364,3 +364,51 @@ public class ReconciliationService {
     }
 }
 
+
+
+
+
+
+package com.example.reconciliation.model;
+
+import java.util.List;
+
+public class ReconciliationResult {
+    private List<Record> matched;
+    private List<Record> unmatched;
+    private int matchedCount;
+    private int unmatchedCount;
+
+    public ReconciliationResult(List<Record> matched, List<Record> unmatched) {
+        this.matched = matched;
+        this.unmatched = unmatched;
+        this.matchedCount = matched.size();
+        this.unmatchedCount = unmatched.size();
+    }
+
+    public List<Record> getMatched() {
+        return matched;
+    }
+
+    public void setMatched(List<Record> matched) {
+        this.matched = matched;
+        this.matchedCount = matched.size();
+    }
+
+    public List<Record> getUnmatched() {
+        return unmatched;
+    }
+
+    public void setUnmatched(List<Record> unmatched) {
+        this.unmatched = unmatched;
+        this.unmatchedCount = unmatched.size();
+    }
+
+    public int getMatchedCount() {
+        return matchedCount;
+    }
+
+    public int getUnmatchedCount() {
+        return unmatchedCount;
+    }
+}
