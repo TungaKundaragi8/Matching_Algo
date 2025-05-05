@@ -220,3 +220,147 @@ public ReconciliationResult reconcile(String algoPath, String starPath, String m
             throw new IllegalArgumentException("Invalid match type");
     }
 }
+
+
+package com.example.reconciliation.service;
+
+import com.example.reconciliation.model.Record;
+import com.example.reconciliation.model.ReconciliationResult;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
+
+import java.io.FileReader;
+import java.util.*;
+
+@Service
+public class ReconciliationService {
+
+    public ReconciliationResult reconcile(String algoPath, String starPath, String matchType) {
+        switch (matchType.toLowerCase()) {
+            case "one-to-one":
+                return performOneToOne(algoPath, starPath);
+            case "one-to-many":
+                return performOneToMany(algoPath, starPath);
+            case "many-to-one":
+                return performManyToOne(algoPath, starPath);
+            case "many-to-many":
+                return performManyToMany(algoPath, starPath);
+            default:
+                throw new IllegalArgumentException("Invalid matchType. Use one-to-one, one-to-many, many-to-one, or many-to-many.");
+        }
+    }
+
+    private ReconciliationResult performOneToOne(String algoPath, String starPath) {
+        // Your existing one-to-one matching logic (you can reuse your working implementation)
+        return baseReconciliation(algoPath, starPath, "one-to-one");
+    }
+
+    private ReconciliationResult performOneToMany(String algoPath, String starPath) {
+        return baseReconciliation(algoPath, starPath, "one-to-many");
+    }
+
+    private ReconciliationResult performManyToOne(String algoPath, String starPath) {
+        return baseReconciliation(algoPath, starPath, "many-to-one");
+    }
+
+    private ReconciliationResult performManyToMany(String algoPath, String starPath) {
+        return baseReconciliation(algoPath, starPath, "many-to-many");
+    }
+
+    private ReconciliationResult baseReconciliation(String algoPath, String starPath, String type) {
+        List<String> algoKeys = new ArrayList<>();
+        List<String> starKeys = new ArrayList<>();
+        List<Record> matched = new ArrayList<>();
+        List<Record> unmatched = new ArrayList<>();
+
+        try {
+            FileReader readerAlgo = new FileReader(algoPath);
+            Iterable<CSVRecord> algoRecords = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(readerAlgo);
+
+            for (CSVRecord record : algoRecords) {
+                String key = record.get("Agreement_name")
+                        .replace("_RIMR", "3CR")
+                        .replace("_RIMP", "3CP")
+                        .replaceAll("\\s+", "")
+                        .trim();
+                algoKeys.add(key);
+            }
+
+            FileReader readerStar = new FileReader(starPath);
+            Iterable<CSVRecord> starRecords = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(readerStar);
+            Map<String, List<Integer>> starKeyMap = new HashMap<>();
+
+            int index = 0;
+            for (CSVRecord record : starRecords) {
+                String key = record.get("CRDS Party Code").replaceAll("\\s+", "").trim()
+                        + "3" + record.get("Post Direction").replaceAll("\\s+", "").trim();
+                starKeys.add(key);
+                starKeyMap.computeIfAbsent(key, k -> new ArrayList<>()).add(index);
+                index++;
+            }
+
+            Set<Integer> matchedStarIndices = new HashSet<>();
+            Set<Integer> matchedAlgoIndices = new HashSet<>();
+
+            for (int i = 0; i < algoKeys.size(); i++) {
+                String algoKey = algoKeys.get(i);
+                List<Integer> matchingStarIdxs = starKeyMap.getOrDefault(algoKey, new ArrayList<>());
+
+                if (type.equals("one-to-one")) {
+                    if (matchingStarIdxs.size() == 1 && !matchedStarIndices.contains(matchingStarIdxs.get(0))) {
+                        matched.add(new Record(algoKey, starKeys.get(matchingStarIdxs.get(0)), "Match"));
+                        matchedStarIndices.add(matchingStarIdxs.get(0));
+                        matchedAlgoIndices.add(i);
+                    } else if (matchingStarIdxs.size() > 1) {
+                        for (Integer idx : matchingStarIdxs) {
+                            unmatched.add(new Record(algoKey, starKeys.get(idx), "Mismatch - Multiple STAR Keys"));
+                        }
+                        matchedAlgoIndices.add(i);
+                    } else {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch - No Match"));
+                    }
+                } else if (type.equals("one-to-many")) {
+                    if (!matchingStarIdxs.isEmpty()) {
+                        for (Integer idx : matchingStarIdxs) {
+                            matched.add(new Record(algoKey, starKeys.get(idx), "Match (One-to-Many)"));
+                            matchedStarIndices.add(idx);
+                        }
+                        matchedAlgoIndices.add(i);
+                    } else {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                    }
+                } else if (type.equals("many-to-one")) {
+                    if (!matchingStarIdxs.isEmpty()) {
+                        matched.add(new Record(algoKey, starKeys.get(matchingStarIdxs.get(0)), "Match (Many-to-One)"));
+                        matchedStarIndices.add(matchingStarIdxs.get(0));
+                        matchedAlgoIndices.add(i);
+                    } else {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                    }
+                } else if (type.equals("many-to-many")) {
+                    for (Integer idx : matchingStarIdxs) {
+                        matched.add(new Record(algoKey, starKeys.get(idx), "Match (Many-to-Many)"));
+                        matchedStarIndices.add(idx);
+                    }
+                    if (matchingStarIdxs.isEmpty()) {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                    }
+                    matchedAlgoIndices.add(i);
+                }
+            }
+
+            for (int i = 0; i < starKeys.size(); i++) {
+                if (!matchedStarIndices.contains(i)) {
+                    unmatched.add(new Record("<No Match>", starKeys.get(i), "Unmatched STAR Key"));
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return new ReconciliationResult(matched, unmatched);
+    }
+}
+
