@@ -1,60 +1,81 @@
-package com.example.reconciliation.model;
+package com.example.reconciliation.service;
 
-import java.util.List;
+import com.example.reconciliation.model.Record; import com.example.reconciliation.model.ReconciliationResult; import org.apache.commons.csv.CSVFormat; import org.apache.commons.csv.CSVRecord; import org.springframework.stereotype.Service;
 
-public class ReconciliationResult {
-    private List<Record> matched;
-    private List<Record> unmatched;
-    private List<Record> excluded;
-    private int matchedCount;
-    private int unmatchedCount;
-    private int excludedCount;
+import java.io.FileReader; import java.time.LocalDate; import java.time.format.DateTimeFormatter; import java.util.*;
 
-    public ReconciliationResult(List<Record> matched, List<Record> unmatched, List<Record> excluded) {
-        this.matched = matched;
-        this.unmatched = unmatched;
-        this.excluded = excluded;
-        this.matchedCount = matched.size();
-        this.unmatchedCount = unmatched.size();
-        this.excludedCount = excluded.size();
+@Service public class ReconciliationService {
+
+public ReconciliationResult reconcile(String algoPath, String starPath, String matchType) {
+    List<Record> matched = new ArrayList<>();
+    List<Record> unmatched = new ArrayList<>();
+    List<Record> excluded = new ArrayList<>();
+
+    try {
+        FileReader readerAlgo = new FileReader(algoPath);
+        Iterable<CSVRecord> algoIterable = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(readerAlgo);
+        List<CSVRecord> algoRecords = new ArrayList<>();
+        for (CSVRecord record : algoIterable) {
+            algoRecords.add(record);
+        }
+
+        FileReader readerStar = new FileReader(starPath);
+        Iterable<CSVRecord> starIterable = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(readerStar);
+        List<CSVRecord> starRecords = new ArrayList<>();
+        for (CSVRecord record : starIterable) {
+            // Exclusion rule: Maturity Date = 01-Jan-1900
+            String maturityDateStr = record.get("Maturity Date").trim();
+            LocalDate maturityDate = LocalDate.parse(maturityDateStr, DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH));
+            if (maturityDate.equals(LocalDate.of(1900, 1, 1))) {
+                excluded.add(new Record("", record.get("CRDS Party Code"), "Excluded - Invalid Maturity Date"));
+            } else {
+                starRecords.add(record);
+            }
+        }
+
+        if (matchType.equalsIgnoreCase("one-to-one")) {
+            performOneToOneMatch(algoRecords, starRecords, matched, unmatched);
+        }
+        // Future: add one-to-many, many-to-one, many-to-many
+
+    } catch (Exception e) {
+        e.printStackTrace();
     }
 
-    public List<Record> getMatched() {
-        return matched;
+    return new ReconciliationResult(matched, unmatched, excluded);
+}
+
+private void performOneToOneMatch(List<CSVRecord> algoRecords, List<CSVRecord> starRecords, List<Record> matched, List<Record> unmatched) {
+    Map<String, Integer> starKeyIndexMap = new HashMap<>();
+    List<String> starKeys = new ArrayList<>();
+
+    for (int i = 0; i < starRecords.size(); i++) {
+        CSVRecord record = starRecords.get(i);
+        String key = record.get("CRDS Party Code").replaceAll("\\s+", "") +
+                "3" +
+                record.get("Post Direction").replaceAll("\\s+", "");
+        starKeys.add(key);
+        starKeyIndexMap.put(key, i);
     }
 
-    public void setMatched(List<Record> matched) {
-        this.matched = matched;
-        this.matchedCount = matched.size();
-    }
+    Set<Integer> matchedStarIndices = new HashSet<>();
 
-    public List<Record> getUnmatched() {
-        return unmatched;
-    }
+    for (int i = 0; i < algoRecords.size(); i++) {
+        CSVRecord algoRecord = algoRecords.get(i);
+        String algoKey = algoRecord.get("Agreement_name")
+                .replace("_RIMR", "3CR")
+                .replace("_RIMP", "3CP")
+                .replaceAll("\\s+", "")
+                .trim();
 
-    public void setUnmatched(List<Record> unmatched) {
-        this.unmatched = unmatched;
-        this.unmatchedCount = unmatched.size();
+        Integer matchedIdx = starKeyIndexMap.get(algoKey);
+        if (matchedIdx != null && !matchedStarIndices.contains(matchedIdx)) {
+            matched.add(new Record(algoKey, starKeys.get(matchedIdx), "Match"));
+            matchedStarIndices.add(matchedIdx);
+        } else {
+            unmatched.add(new Record(algoKey, "<No Match>", "Mismatch - No Match or Duplicate"));
+        }
     }
+}
 
-    public List<Record> getExcluded() {
-        return excluded;
-    }
-
-    public void setExcluded(List<Record> excluded) {
-        this.excluded = excluded;
-        this.excludedCount = excluded.size();
-    }
-
-    public int getMatchedCount() {
-        return matchedCount;
-    }
-
-    public int getUnmatchedCount() {
-        return unmatchedCount;
-    }
-
-    public int getExcludedCount() {
-        return excludedCount;
-    }
 }
