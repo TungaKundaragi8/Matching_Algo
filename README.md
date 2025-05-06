@@ -128,3 +128,34 @@ public class ReconciliationService {
         resultRepository.save(result);
     }
 }
+
+
+
+
+
+
+
+package com.example.reconciliation.controller;
+
+import com.example.reconciliation.service.ReconciliationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/reconciliation")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    @PostMapping
+    public String reconcile(@RequestParam String matchType) {
+        try {
+            reconciliationService.reconcile(matchType);
+            return "Reconciliation completed successfully with match type: " + matchType;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Reconciliation failed: " + e.getMessage();
+        }
+    }
+}
