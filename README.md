@@ -706,3 +706,367 @@ private ReconciliationResultEntity createResult(String algoKey, String starKey, 
 
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// File: Record.java package com.example.reconciliation.model;
+
+public class Record { private String algoKey; private String starKey; private String status;
+
+public Record() {}
+
+public Record(String algoKey, String starKey, String status) {
+    this.algoKey = algoKey;
+    this.starKey = starKey;
+    this.status = status;
+}
+
+public String getAlgoKey() {
+    return algoKey;
+}
+
+public void setAlgoKey(String algoKey) {
+    this.algoKey = algoKey;
+}
+
+public String getStarKey() {
+    return starKey;
+}
+
+public void setStarKey(String starKey) {
+    this.starKey = starKey;
+}
+
+public String getStatus() {
+    return status;
+}
+
+public void setStatus(String status) {
+    this.status = status;
+}
+
+}
+
+// File: AlgoRecord.java package com.example.reconciliation.entity;
+
+import jakarta.persistence.*;
+
+@Entity @Table(name = "ALGO_RECORDS") public class AlgoRecord {
+
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)
+private Long id;
+
+@Column(name = "AGREEMENT_NAME")
+private String agreementName;
+
+// Getters and Setters
+public Long getId() {
+    return id;
+}
+
+public void setId(Long id) {
+    this.id = id;
+}
+
+public String getAgreementName() {
+    return agreementName;
+}
+
+public void setAgreementName(String agreementName) {
+    this.agreementName = agreementName;
+}
+
+}
+
+// File: StarRecord.java package com.example.reconciliation.entity;
+
+import jakarta.persistence.*;
+
+@Entity @Table(name = "STAR_RECORDS") public class StarRecord {
+
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)
+private Long id;
+
+@Column(name = "CRDS_PARTY_CODE")
+private String crdsPartyCode;
+
+@Column(name = "POST_DIRECTION")
+private String postDirection;
+
+@Column(name = "MATURITY_DATE")
+private String maturityDate;
+
+// Getters and Setters
+public Long getId() {
+    return id;
+}
+
+public void setId(Long id) {
+    this.id = id;
+}
+
+public String getCrdsPartyCode() {
+    return crdsPartyCode;
+}
+
+public void setCrdsPartyCode(String crdsPartyCode) {
+    this.crdsPartyCode = crdsPartyCode;
+}
+
+public String getPostDirection() {
+    return postDirection;
+}
+
+public void setPostDirection(String postDirection) {
+    this.postDirection = postDirection;
+}
+
+public String getMaturityDate() {
+    return maturityDate;
+}
+
+public void setMaturityDate(String maturityDate) {
+    this.maturityDate = maturityDate;
+}
+
+}
+
+// File: ExcludedRecord.java package com.example.reconciliation.entity;
+
+import jakarta.persistence.*;
+
+@Entity @Table(name = "EXCLUDED_RECORDS") public class ExcludedRecord {
+
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)
+private Long id;
+private String algoKey;
+private String starKey;
+private String reason;
+
+// Getters and Setters
+public Long getId() {
+    return id;
+}
+
+public void setId(Long id) {
+    this.id = id;
+}
+
+public String getAlgoKey() {
+    return algoKey;
+}
+
+public void setAlgoKey(String algoKey) {
+    this.algoKey = algoKey;
+}
+
+public String getStarKey() {
+    return starKey;
+}
+
+public void setStarKey(String starKey) {
+    this.starKey = starKey;
+}
+
+public String getReason() {
+    return reason;
+}
+
+public void setReason(String reason) {
+    this.reason = reason;
+}
+
+}
+
+// File: ResultRecord.java package com.example.reconciliation.entity;
+
+import jakarta.persistence.*;
+
+@Entity @Table(name = "RECONCILIATION_RESULTS") public class ResultRecord { @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id; private String algoKey; private String starKey; private String status;
+
+// Getters and Setters
+public Long getId() {
+    return id;
+}
+
+public void setId(Long id) {
+    this.id = id;
+}
+
+public String getAlgoKey() {
+    return algoKey;
+}
+
+public void setAlgoKey(String algoKey) {
+    this.algoKey = algoKey;
+}
+
+public String getStarKey() {
+    return starKey;
+}
+
+public void setStarKey(String starKey) {
+    this.starKey = starKey;
+}
+
+public String getStatus() {
+    return status;
+}
+
+public void setStatus(String status) {
+    this.status = status;
+}
+
+}
+
+// File: AlgoRecordRepository.java package com.example.reconciliation.repository;
+
+import com.example.reconciliation.entity.AlgoRecord; import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AlgoRecordRepository extends JpaRepository<AlgoRecord, Long> {}
+
+// File: StarRecordRepository.java package com.example.reconciliation.repository;
+
+import com.example.reconciliation.entity.StarRecord; import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface StarRecordRepository extends JpaRepository<StarRecord, Long> {}
+
+// File: ExcludedRecordRepository.java package com.example.reconciliation.repository;
+
+import com.example.reconciliation.entity.ExcludedRecord; import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ExcludedRecordRepository extends JpaRepository<ExcludedRecord, Long> {}
+
+// File: ResultRecordRepository.java package com.example.reconciliation.repository;
+
+import com.example.reconciliation.entity.ResultRecord; import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ResultRecordRepository extends JpaRepository<ResultRecord, Long> {}
+
+// File: ReconciliationService.java package com.example.reconciliation.service;
+
+import com.example.reconciliation.entity.; import com.example.reconciliation.repository.; import org.springframework.stereotype.Service;
+
+import java.util.*;
+
+@Service public class ReconciliationService {
+
+private final AlgoRecordRepository algoRepo;
+private final StarRecordRepository starRepo;
+private final ExcludedRecordRepository excludedRepo;
+private final ResultRecordRepository resultRepo;
+
+public ReconciliationService(AlgoRecordRepository algoRepo, StarRecordRepository starRepo,
+                             ExcludedRecordRepository excludedRepo, ResultRecordRepository resultRepo) {
+    this.algoRepo = algoRepo;
+    this.starRepo = starRepo;
+    this.excludedRepo = excludedRepo;
+    this.resultRepo = resultRepo;
+}
+
+public void runExclusionAndSave() {
+    List<AlgoRecord> algoList = algoRepo.findAll();
+    List<StarRecord> starList = starRepo.findAll();
+
+    Map<Long, String> algoKeyMap = new HashMap<>();
+    for (AlgoRecord algo : algoList) {
+        String key = algo.getAgreementName().replace("_RIMP", "_3CP").replace("_RIMR", "_3CR").trim();
+        algoKeyMap.put(algo.getId(), key);
+    }
+
+    for (StarRecord star : starList) {
+        String starKey = star.getCrdsPartyCode().trim() + "3" + star.getPostDirection().trim();
+        if ("01-JAN-1900".equalsIgnoreCase(star.getMaturityDate().trim())) {
+            ExcludedRecord excluded = new ExcludedRecord();
+            excluded.setStarKey(starKey);
+            excluded.setAlgoKey("<Not Linked>");
+            excluded.setReason("Maturity Date = 01-JAN-1900");
+            excludedRepo.save(excluded);
+        }
+    }
+}
+
+public void performMatching(String matchType) {
+    List<AlgoRecord> algoList = algoRepo.findAll();
+    List<StarRecord> starList = starRepo.findAll();
+    List<ExcludedRecord> excluded = excludedRepo.findAll();
+    Set<String> excludedStarKeys = new HashSet<>();
+
+    for (ExcludedRecord ex : excluded) {
+        excludedStarKeys.add(ex.getStarKey());
+    }
+
+    Map<String, Long> starMap = new HashMap<>();
+    for (StarRecord star : starList) {
+        String key = star.getCrdsPartyCode().trim() + "3" + star.getPostDirection().trim();
+        if (!excludedStarKeys.contains(key)) {
+            starMap.put(key, star.getId());
+        }
+    }
+
+    for (AlgoRecord algo : algoList) {
+        String algoKey = algo.getAgreementName().replace("_RIMP", "_3CP").replace("_RIMR", "_3CR").trim();
+        if (starMap.containsKey(algoKey)) {
+            ResultRecord r = new ResultRecord();
+            r.setAlgoKey(algoKey);
+            r.setStarKey(algoKey);
+            r.setStatus("Matched");
+            resultRepo.save(r);
+        } else {
+            ResultRecord r = new ResultRecord();
+            r.setAlgoKey(algoKey);
+            r.setStarKey("<No Match>");
+            r.setStatus("Unmatched");
+            resultRepo.save(r);
+        }
+    }
+}
+
+}
+
+// File: ReconciliationController.java package com.example.reconciliation.controller;
+
+import com.example.reconciliation.service.ReconciliationService; import org.springframework.web.bind.annotation.*;
+
+@RestController @RequestMapping("/api/reconciliation") public class ReconciliationController {
+
+private final ReconciliationService service;
+
+public ReconciliationController(ReconciliationService service) {
+    this.service = service;
+}
+
+@GetMapping("/exclude")
+public String runExclusion() {
+    service.runExclusionAndSave();
+    return "Exclusion rule applied and excluded records saved.";
+}
+
+@GetMapping("/match/{type}")
+public String runMatching(@PathVariable("type") String type) {
+    service.performMatching(type);
+    return "Matching completed with type: " + type;
+}
+
+}
+
+
