@@ -1471,3 +1471,123 @@ public class ReconciliationController {
         return reconciliationService.reconcile(algoPath, starPath, action, matchType);
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package com.example.demo.service;
+
+import com.example.demo.model.ReconciliationResult;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
+
+import java.io.FileReader;
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+@Service
+public class ReconciliationService {
+
+    public ReconciliationResult reconcile(String algoPath, String starPath, String action, String matchType) {
+        try {
+            Reader readerAlgo = new FileReader(algoPath);
+            Reader readerStar = new FileReader(starPath);
+
+            // Convert Iterable<CSVRecord> to List<CSVRecord>
+            List<CSVRecord> algoRecords = new ArrayList<>();
+            CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(readerAlgo).forEach(algoRecords::add);
+
+            List<CSVRecord> starRecords = new ArrayList<>();
+            CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(readerStar).forEach(starRecords::add);
+
+            List<CSVRecord> excluded = new ArrayList<>();
+            List<CSVRecord> filteredStar = starRecords;
+
+            if ("exclude".equalsIgnoreCase(action)) {
+                filteredStar = applyExclusionRule(starRecords, excluded);
+            }
+
+            return match(algoRecords, filteredStar, matchType.toLowerCase());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ReconciliationResult(Collections.emptyList(), Collections.emptyList());
+        }
+    }
+
+    private List<CSVRecord> applyExclusionRule(List<CSVRecord> records, List<CSVRecord> excluded) {
+        List<CSVRecord> result = new ArrayList<>();
+        for (CSVRecord record : records) {
+            String maturityDate = record.get("MATURITY_DATE");
+            if ("1900-01-01".equals(maturityDate)) {
+                excluded.add(record);
+            } else {
+                result.add(record);
+            }
+        }
+        return result;
+    }
+
+    private ReconciliationResult match(List<CSVRecord> algo, List<CSVRecord> star, String matchType) {
+        // Simple 1-1 matching stub
+        List<CSVRecord> matched = new ArrayList<>();
+        List<CSVRecord> unmatched = new ArrayList<>(algo);
+
+        for (CSVRecord algoRec : algo) {
+            for (CSVRecord starRec : star) {
+                if (algoRec.get("ID").equals(starRec.get("ID"))) {
+                    matched.add(algoRec);
+                    unmatched.remove(algoRec);
+                    break;
+                }
+            }
+        }
+
+        return new ReconciliationResult(matched, unmatched);
+    }
+}
+
+
+
+
+package com.example.demo.controller;
+
+import com.example.demo.model.ReconciliationResult;
+import com.example.demo.service.ReconciliationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/reconcile")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    @GetMapping("/run")
+    public ReconciliationResult runReconciliation() {
+        // Provide absolute or relative file paths here
+        String algoFilePath = "C:/Users/YourUser/Desktop/input/algo.csv";
+        String starFilePath = "C:/Users/YourUser/Desktop/input/star.csv";
+
+        String action = "exclude";         // or "none"
+        String matchType = "1-1";          // use match type like "1-1", "1-many", etc.
+
+        return reconciliationService.reconcile(algoFilePath, starFilePath, action, matchType);
+    }
+}
