@@ -2039,3 +2039,48 @@ GET http://localhost:8080/reconciliation/match/one-to-one → performs matching 
 
 Let me know if you want this to also store to a database or return counts along with the data.
 
+
+
+public class ReconciliationResult {
+    private List<Record> matched;
+    private List<Record> unmatched;
+    private List<Record> excluded;
+    private int matchedCount;
+    private int unmatchedCount;
+    private int excludedCount;
+
+    // Constructors
+    public ReconciliationResult() {}
+
+    public ReconciliationResult(List<Record> matched, List<Record> unmatched, List<Record> excluded) {
+        this.matched = matched;
+        this.unmatched = unmatched;
+        this.excluded = excluded;
+        this.matchedCount = matched != null ? matched.size() : 0;
+        this.unmatchedCount = unmatched != null ? unmatched.size() : 0;
+        this.excludedCount = excluded != null ? excluded.size() : 0;
+    }
+
+    // Getters and setters
+    public List<Record> getMatched() { return matched; }
+    public void setMatched(List<Record> matched) {
+        this.matched = matched;
+        this.matchedCount = matched != null ? matched.size() : 0;
+    }
+
+    public List<Record> getUnmatched() { return unmatched; }
+    public void setUnmatched(List<Record> unmatched) {
+        this.unmatched = unmatched;
+        this.unmatchedCount = unmatched != null ? unmatched.size() : 0;
+    }
+
+    public List<Record> getExcluded() { return excluded; }
+    public void setExcluded(List<Record> excluded) {
+        this.excluded = excluded;
+        this.excludedCount = excluded != null ? excluded.size() : 0;
+    }
+
+    public int getMatchedCount() { return matchedCount; }
+    public int getUnmatchedCount() { return unmatchedCount; }
+    public int getExcludedCount() { return excludedCount; }
+}
