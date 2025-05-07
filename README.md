@@ -1192,5 +1192,32 @@ public void transformAndFilter() {
 
 // Add matchOneToOne(), matchOneToMany(), etc. if needed
 
-}
+}package com.example.reconciliation.controller;
 
+import com.example.reconciliation.service.ReconciliationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/reconciliation")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    // Run exclusion + transformation logic
+    @PostMapping("/transform-and-exclude")
+    public String transformAndExclude() {
+        reconciliationService.performTransformationAndExclusion();
+        return "Transformation and exclusion completed. Non-excluded records stored.";
+    }
+
+    // Run one-to-one matching on non-excluded records
+    @GetMapping("/match/one-to-one")
+    public String oneToOneMatching() {
+        reconciliationService.matchOneToOne();
+        return "One-to-one matching completed.";
+    }
+
+    // You can later add other matching types here like /match/one-to-many etc.
+}
