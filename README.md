@@ -1757,3 +1757,285 @@ public ReconciliationResult runReconciliation() {
     String starPath = "C:/path/to/star.csv";
     return reconciliationService.reconcile(algoPath, starPath, "exclude", "one-to-one");
 }
+
+
+
+
+
+
+
+
+
+
+
+Here is the full updated Spring Boot Reconciliation implementation with:
+
+/exclude endpoint – reads CSVs, applies exclusion and stores non-excluded records in memory.
+
+/match/{type} endpoint – performs matching on in-memory stored data (1-1, 1-many, many-1, many-many).
+
+
+
+---
+
+✅ 1. ReconciliationController.java
+
+package com.example.reconciliation.controller;
+
+import com.example.reconciliation.model.ReconciliationResult;
+import com.example.reconciliation.service.ReconciliationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/reconciliation")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    @GetMapping("/exclude")
+    public String applyExclusion() {
+        String algoPath = "C:/path/to/algo.csv"; // Update path
+        String starPath = "C:/path/to/star.csv"; // Update path
+
+        reconciliationService.excludeAndStore(algoPath, starPath);
+        return "Exclusion complete. Now call /reconciliation/match/{type} to perform matching.";
+    }
+
+    @GetMapping("/match/{type}")
+    public ReconciliationResult match(@PathVariable String type) {
+        return reconciliationService.matchOnStoredData(type.toLowerCase());
+    }
+}
+
+
+---
+
+✅ 2. ReconciliationService.java
+
+package com.example.reconciliation.service;
+
+import com.example.reconciliation.model.Record;
+import com.example.reconciliation.model.ReconciliationResult;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
+
+import java.io.FileReader;
+import java.util.*;
+
+@Service
+public class ReconciliationService {
+
+    private List<CSVRecord> nonExcludedAlgo = new ArrayList<>();
+    private List<CSVRecord> nonExcludedStar = new ArrayList<>();
+    private List<CSVRecord> excludedStar = new ArrayList<>();
+
+    public void excludeAndStore(String algoPath, String starPath) {
+        try {
+            CSVParser algoParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(algoPath));
+            CSVParser starParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(starPath));
+
+            List<CSVRecord> algoRecords = algoParser.getRecords();
+            List<CSVRecord> starRecords = starParser.getRecords();
+
+            this.nonExcludedAlgo = algoRecords;
+            this.excludedStar = new ArrayList<>();
+            this.nonExcludedStar = applyExclusionRule(starRecords, this.excludedStar);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public ReconciliationResult matchOnStoredData(String matchType) {
+        return match(nonExcludedAlgo, nonExcludedStar, matchType, excludedStar);
+    }
+
+    private List<CSVRecord> applyExclusionRule(List<CSVRecord> starRecords, List<CSVRecord> excluded) {
+        List<CSVRecord> filtered = new ArrayList<>();
+        for (CSVRecord record : starRecords) {
+            String maturityDate = record.get("Maturity Date").trim();
+            if (!maturityDate.contains("1900")) {
+                filtered.add(record);
+            } else {
+                excluded.add(record);
+            }
+        }
+        return filtered;
+    }
+
+    private ReconciliationResult match(List<CSVRecord> algoRecords, List<CSVRecord> starRecords, String type, List<CSVRecord> excludedStar) {
+        List<Record> matched = new ArrayList<>();
+        List<Record> unmatched = new ArrayList<>();
+        List<Record> excluded = new ArrayList<>();
+
+        List<String> algoKeys = new ArrayList<>();
+        for (CSVRecord record : algoRecords) {
+            String key = record.get("Agreement_name")
+                    .replace("_RIMR", "3CR")
+                    .replace("_RIMP", "3CP")
+                    .replaceAll("\\s+", "")
+                    .trim();
+            algoKeys.add(key);
+        }
+
+        Map<String, List<Integer>> starKeyMap = new HashMap<>();
+        List<String> starKeys = new ArrayList<>();
+        int index = 0;
+        for (CSVRecord record : starRecords) {
+            String key = record.get("CRDS Party Code").replaceAll("\\s+", "").trim() +
+                    "3" + record.get("Post Direction").replaceAll("\\s+", "").trim();
+            starKeys.add(key);
+            starKeyMap.computeIfAbsent(key, k -> new ArrayList<>()).add(index);
+            index++;
+        }
+
+        Set<Integer> matchedStarIndices = new HashSet<>();
+        Set<Integer> matchedAlgoIndices = new HashSet<>();
+
+        for (int i = 0; i < algoKeys.size(); i++) {
+            String algoKey = algoKeys.get(i);
+            List<Integer> matchingStarIdxs = starKeyMap.getOrDefault(algoKey, new ArrayList<>());
+
+            switch (type) {
+                case "one-to-one":
+                    if (matchingStarIdxs.size() == 1 && !matchedStarIndices.contains(matchingStarIdxs.get(0))) {
+                        matched.add(new Record(algoKey, starKeys.get(matchingStarIdxs.get(0)), "Match"));
+                        matchedStarIndices.add(matchingStarIdxs.get(0));
+                        matchedAlgoIndices.add(i);
+                    } else {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                    }
+                    break;
+                case "one-to-many":
+                    if (!matchingStarIdxs.isEmpty()) {
+                        for (Integer idx : matchingStarIdxs) {
+                            matched.add(new Record(algoKey, starKeys.get(idx), "Match (One-to-Many)"));
+                            matchedStarIndices.add(idx);
+                        }
+                        matchedAlgoIndices.add(i);
+                    } else {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                    }
+                    break;
+                case "many-to-one":
+                    if (!matchingStarIdxs.isEmpty()) {
+                        matched.add(new Record(algoKey, starKeys.get(matchingStarIdxs.get(0)), "Match (Many-to-One)"));
+                        matchedStarIndices.add(matchingStarIdxs.get(0));
+                        matchedAlgoIndices.add(i);
+                    } else {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                    }
+                    break;
+                case "many-to-many":
+                    if (!matchingStarIdxs.isEmpty()) {
+                        for (Integer idx : matchingStarIdxs) {
+                            matched.add(new Record(algoKey, starKeys.get(idx), "Match (Many-to-Many)"));
+                            matchedStarIndices.add(idx);
+                        }
+                        matchedAlgoIndices.add(i);
+                    } else {
+                        unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                    }
+                    break;
+                default:
+                    unmatched.add(new Record(algoKey, "<No Match>", "Unknown Matching Type"));
+            }
+        }
+
+        for (int i = 0; i < starKeys.size(); i++) {
+            if (!matchedStarIndices.contains(i)) {
+                unmatched.add(new Record("<No Match>", starKeys.get(i), "Unmatched STAR Key"));
+            }
+        }
+
+        for (CSVRecord excludedRecord : excludedStar) {
+            String excludedKey = excludedRecord.get("CRDS Party Code").replaceAll("\\s+", "") +
+                    "3" + excludedRecord.get("Post Direction").replaceAll("\\s+", "");
+            excluded.add(new Record("<Excluded>", excludedKey, "Excluded by Rule (Maturity Date = 1900)"));
+        }
+
+        return new ReconciliationResult(matched, unmatched, excluded);
+    }
+}
+
+
+---
+
+✅ 3. Record.java
+
+package com.example.reconciliation.model;
+
+public class Record {
+    private String algoKey;
+    private String starKey;
+    private String status;
+
+    public Record() {}
+
+    public Record(String algoKey, String starKey, String status) {
+        this.algoKey = algoKey;
+        this.starKey = starKey;
+        this.status = status;
+    }
+
+    public String getAlgoKey() { return algoKey; }
+    public void setAlgoKey(String algoKey) { this.algoKey = algoKey; }
+
+    public String getStarKey() { return starKey; }
+    public void setStarKey(String starKey) { this.starKey = starKey; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+}
+
+
+---
+
+✅ 4. ReconciliationResult.java
+
+package com.example.reconciliation.model;
+
+import java.util.List;
+
+public class ReconciliationResult {
+    private List<Record> matched;
+    private List<Record> unmatched;
+    private List<Record> excluded;
+
+    public ReconciliationResult() {}
+
+    public ReconciliationResult(List<Record> matched, List<Record> unmatched, List<Record> excluded) {
+        this.matched = matched;
+        this.unmatched = unmatched;
+        this.excluded = excluded;
+    }
+
+    public List<Record> getMatched() { return matched; }
+    public void setMatched(List<Record> matched) { this.matched = matched; }
+
+    public List<Record> getUnmatched() { return unmatched; }
+    public void setUnmatched(List<Record> unmatched) { this.unmatched = unmatched; }
+
+    public List<Record> getExcluded() { return excluded; }
+    public void setExcluded(List<Record> excluded) { this.excluded = excluded; }
+}
+
+
+---
+
+✅ Example Calls
+
+GET http://localhost:8080/reconciliation/exclude → applies exclusion, stores transformed data.
+
+GET http://localhost:8080/reconciliation/match/one-to-one → performs matching on stored data.
+
+
+
+---
+
+Let me know if you want this to also store to a database or return counts along with the data.
+
