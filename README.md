@@ -1070,3 +1070,127 @@ public String runMatching(@PathVariable("type") String type) {
 }
 
 
+
+
+
+
+
+
+// AlgoRecord.java @Entity @Table(name = "Initial_margin_EOD") public class AlgoRecord { @Id @Column(name = "AGREEMENT_NAME") private String agreementName;
+
+// Getters and Setters
+public String getAgreementName() { return agreementName; }
+public void setAgreementName(String agreementName) { this.agreementName = agreementName; }
+
+}
+
+// StarRecord.java @Entity @Table(name = "StarAlgo") public class StarRecord { @Id @Column(name = "CRDS_PARTY_CODE") private String crdsPartyCode;
+
+@Column(name = "POST_DIRECTION")
+private String postDirection;
+
+@Column(name = "MATURITY_DATE")
+private Timestamp maturityDate;
+
+// Getters and Setters
+public String getCrdsPartyCode() { return crdsPartyCode; }
+public void setCrdsPartyCode(String crdsPartyCode) { this.crdsPartyCode = crdsPartyCode; }
+
+public String getPostDirection() { return postDirection; }
+public void setPostDirection(String postDirection) { this.postDirection = postDirection; }
+
+public Timestamp getMaturityDate() { return maturityDate; }
+public void setMaturityDate(Timestamp maturityDate) { this.maturityDate = maturityDate; }
+
+}
+
+// NonExcludedAlgo.java @Entity public class NonExcludedAlgo { @Id private String agreementName; private String transformedAgreementName;
+
+// Getters and Setters
+public String getAgreementName() { return agreementName; }
+public void setAgreementName(String agreementName) { this.agreementName = agreementName; }
+
+public String getTransformedAgreementName() { return transformedAgreementName; }
+public void setTransformedAgreementName(String transformedAgreementName) { this.transformedAgreementName = transformedAgreementName; }
+
+}
+
+// NonExcludedStar.java @Entity public class NonExcludedStar { @Id private String crdsPartyCode;
+
+private String postDirection;
+private Timestamp maturityDate;
+private String transformedPartyCode;
+
+// Getters and Setters
+public String getCrdsPartyCode() { return crdsPartyCode; }
+public void setCrdsPartyCode(String crdsPartyCode) { this.crdsPartyCode = crdsPartyCode; }
+
+public String getPostDirection() { return postDirection; }
+public void setPostDirection(String postDirection) { this.postDirection = postDirection; }
+
+public Timestamp getMaturityDate() { return maturityDate; }
+public void setMaturityDate(Timestamp maturityDate) { this.maturityDate = maturityDate; }
+
+public String getTransformedPartyCode() { return transformedPartyCode; }
+public void setTransformedPartyCode(String transformedPartyCode) { this.transformedPartyCode = transformedPartyCode; }
+
+}
+
+// Repositories @Repository public interface AlgoRecordRepository extends JpaRepository<AlgoRecord, String> {}
+
+@Repository public interface StarRecordRepository extends JpaRepository<StarRecord, String> {}
+
+@Repository public interface NonExcludedAlgoRepository extends JpaRepository<NonExcludedAlgo, String> {}
+
+@Repository public interface NonExcludedStarRepository extends JpaRepository<NonExcludedStar, String> {}
+
+// ReconciliationService.java @Service public class ReconciliationService { @Autowired private AlgoRecordRepository algoRepo;
+
+@Autowired
+private StarRecordRepository starRepo;
+
+@Autowired
+private NonExcludedAlgoRepository nonExcludedAlgoRepo;
+
+@Autowired
+private NonExcludedStarRepository nonExcludedStarRepo;
+
+public void transformAndFilter() {
+    List<AlgoRecord> algoRecords = algoRepo.findAll();
+    List<StarRecord> starRecords = starRepo.findAll();
+
+    List<NonExcludedAlgo> nonExcludedAlgos = new ArrayList<>();
+    List<NonExcludedStar> nonExcludedStars = new ArrayList<>();
+
+    for (AlgoRecord algo : algoRecords) {
+        String transformed = algo.getAgreementName()
+                .replace("_RIMP", "_3CP")
+                .replace("_RIMR", "_3CR");
+        NonExcludedAlgo neAlgo = new NonExcludedAlgo();
+        neAlgo.setAgreementName(algo.getAgreementName());
+        neAlgo.setTransformedAgreementName(transformed);
+        nonExcludedAlgos.add(neAlgo);
+    }
+
+    for (StarRecord star : starRecords) {
+        if (star.getMaturityDate() != null &&
+            star.getMaturityDate().toLocalDateTime().toLocalDate().equals(LocalDate.of(1900, 1, 1))) {
+            continue;
+        }
+        String transformed = star.getCrdsPartyCode() + "3" + star.getPostDirection();
+        NonExcludedStar neStar = new NonExcludedStar();
+        neStar.setCrdsPartyCode(star.getCrdsPartyCode());
+        neStar.setPostDirection(star.getPostDirection());
+        neStar.setMaturityDate(star.getMaturityDate());
+        neStar.setTransformedPartyCode(transformed);
+        nonExcludedStars.add(neStar);
+    }
+
+    nonExcludedAlgoRepo.saveAll(nonExcludedAlgos);
+    nonExcludedStarRepo.saveAll(nonExcludedStars);
+}
+
+// Add matchOneToOne(), matchOneToMany(), etc. if needed
+
+}
+
