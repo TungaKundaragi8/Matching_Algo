@@ -1143,3 +1143,97 @@ public class Record {
         this.status = status;
     }
 }
+
+
+package com.example.demo.service;
+
+import com.example.demo.model.Record;
+import com.example.demo.model.ReconciliationResult;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class ReconciliationService {
+
+    private List<Record> nonExcludedAlgo = new ArrayList<>();
+    private List<Record> nonExcludedStar = new ArrayList<>();
+    private List<Record> excludedStar = new ArrayList<>();
+
+    public ReconciliationResult excludeAndTransform(String algoPath, String starPath) {
+        nonExcludedAlgo.clear();
+        nonExcludedStar.clear();
+        excludedStar.clear();
+
+        try (BufferedReader algoReader = new BufferedReader(new FileReader(algoPath));
+             BufferedReader starReader = new BufferedReader(new FileReader(starPath))) {
+
+            // Skip header
+            algoReader.readLine();
+            starReader.readLine();
+
+            // Process ALGO
+            String line;
+            while ((line = algoReader.readLine()) != null) {
+                String[] parts = line.split(",", -1);
+                String key = parts[0].replace("_RIMP", "_3CP").replace("_RIMR", "_3CR");
+                nonExcludedAlgo.add(new Record(key, "", ""));
+            }
+
+            // Process STAR
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("M/d/yyyy");
+
+            while ((line = starReader.readLine()) != null) {
+                String[] parts = line.split(",", -1);
+                String crdsPartyCode = parts[0];
+                String postDirection = parts[1];
+                String maturityDateStr = parts[2];
+
+                String key = crdsPartyCode + "3" + postDirection;
+
+                LocalDate maturityDate = LocalDate.parse(maturityDateStr, formatter);
+                if (maturityDate.equals(LocalDate.of(1900, 1, 1))) {
+                    excludedStar.add(new Record("", key, "EXCLUDED"));
+                } else {
+                    nonExcludedStar.add(new Record("", key, ""));
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // Return non-excluded records and counts
+        List<Record> summary = new ArrayList<>();
+        summary.add(new Record("Non-Excluded ALGO", String.valueOf(nonExcludedAlgo.size()), ""));
+        summary.add(new Record("Non-Excluded STAR", String.valueOf(nonExcludedStar.size()), ""));
+        summary.add(new Record("Excluded STAR", String.valueOf(excludedStar.size()), ""));
+
+        return new ReconciliationResult(new ArrayList<>(), new ArrayList<>(), summary);
+    }
+
+    public ReconciliationResult match(String type) {
+        List<Record> matched = new ArrayList<>();
+        List<Record> unmatched = new ArrayList<>();
+
+        Set<String> starKeys = nonExcludedStar.stream()
+                .map(Record::getStarKey)
+                .collect(Collectors.toSet());
+
+        for (Record algoRecord : nonExcludedAlgo) {
+            String algoKey = algoRecord.getAlgoKey();
+            if (starKeys.contains(algoKey)) {
+                matched.add(new Record(algoKey, algoKey, "MATCHED"));
+            } else {
+                unmatched.add(new Record(algoKey, "", "UNMATCHED"));
+            }
+        }
+
+        return new ReconciliationResult(matched, unmatched, new ArrayList<>());
+    }
+}
