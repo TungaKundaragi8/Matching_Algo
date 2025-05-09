@@ -278,3 +278,56 @@ public class ReconciliationController {
         return reconciliationService.match(type);
     }
 }
+
+
+
+
+
+public ReconciliationResult excludeAndTransform(String algoPath, String starPath) {
+    try {
+        CSVParser algoParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(algoPath));
+        CSVParser starParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(starPath));
+
+        List<CSVRecord> algoRecords = algoParser.getRecords();
+        List<CSVRecord> starRecords = starParser.getRecords();
+
+        nonExcludedAlgo.clear();
+        nonExcludedStar.clear();
+        excludedRecords.clear();
+
+        for (CSVRecord record : starRecords) {
+            String maturityDate = record.get("Maturity Date").trim().toLowerCase();
+            if (maturityDate.contains("1900")) {
+                excludedRecords.add(new Record(
+                    "<Excluded>",
+                    record.get("CRDS Party Code").replaceAll("\\s+", "") +
+                    "3" + record.get("Post Direction").replaceAll("\\s+", ""),
+                    "Excluded by Maturity Date"));
+            } else {
+                nonExcludedStar.add(record);
+            }
+        }
+
+        nonExcludedAlgo.addAll(algoRecords);
+
+        // Transform non-excluded records into Result format to return
+        List<Record> transformedNonExcluded = new ArrayList<>();
+        for (CSVRecord record : nonExcludedStar) {
+            String starKey = record.get("CRDS Party Code").replaceAll("\\s+", "") +
+                             "3" + record.get("Post Direction").replaceAll("\\s+", "");
+            transformedNonExcluded.add(new Record("<Non-Excluded>", starKey, "Kept for Matching"));
+        }
+
+        return new ReconciliationResult(
+            Collections.emptyList(),            // No matched
+            transformedNonExcluded,            // Show non-excluded
+            Collections.singletonList(         // Represent count in one record
+                new Record("Excluded Count", String.valueOf(excludedRecords.size()), "Excluded Records")
+            )
+        );
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return new ReconciliationResult(Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+    }
+}
