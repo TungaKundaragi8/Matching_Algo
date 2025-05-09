@@ -845,3 +845,301 @@ public class ReconciliationController {
         return service.match(type);
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package com.example.reconciliation.controller;
+
+import com.example.reconciliation.model.ReconciliationResult;
+import com.example.reconciliation.service.ReconciliationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/reconcile")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService service;
+
+    @GetMapping("/exclude")
+    public ReconciliationResult exclude(@RequestParam String algoPath,
+                                        @RequestParam String starPath,
+                                        @RequestParam String exclusionDate) {
+        return service.excludeAndTransform(algoPath, starPath, exclusionDate);
+    }
+
+    @GetMapping("/match/{type}")
+    public ReconciliationResult match(@PathVariable String type,
+                                      @RequestParam String algoPath,
+                                      @RequestParam String starPath) {
+        return service.match(type, algoPath, starPath);
+    }
+}
+
+
+
+
+package com.example.reconciliation.service;
+
+import com.example.reconciliation.model.Record;
+import com.example.reconciliation.model.ReconciliationResult;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
+
+import java.io.FileReader;
+import java.util.*;
+
+@Service
+public class ReconciliationService {
+
+    private List<CSVRecord> nonExcludedAlgo = new ArrayList<>();
+    private List<CSVRecord> nonExcludedStar = new ArrayList<>();
+    private int excludedCount = 0;
+
+    public ReconciliationResult excludeAndTransform(String algoPath, String starPath, String exclusionDate) {
+        try {
+            CSVParser algoParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(algoPath));
+            CSVParser starParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(starPath));
+
+            List<CSVRecord> algoRecords = algoParser.getRecords();
+            List<CSVRecord> starRecords = starParser.getRecords();
+
+            nonExcludedAlgo.clear();
+            nonExcludedStar.clear();
+            excludedCount = 0;
+
+            for (CSVRecord record : starRecords) {
+                String maturityDate = record.get("Maturity Date").trim().toLowerCase();
+                if (maturityDate.contains(exclusionDate.toLowerCase())) {
+                    excludedCount++;
+                } else {
+                    nonExcludedStar.add(record);
+                }
+            }
+
+            nonExcludedAlgo.addAll(algoRecords);
+
+            List<Record> nonExcludedRecords = new ArrayList<>();
+            for (CSVRecord record : nonExcludedStar) {
+                String key = record.get("CRDS Party Code").replaceAll("\\s+", "") +
+                        "3" + record.get("Post Direction").replaceAll("\\s+", "");
+                nonExcludedRecords.add(new Record("<Non-Excluded>", key, "Included for Matching"));
+            }
+
+            return new ReconciliationResult(
+                    Collections.emptyList(),
+                    nonExcludedRecords,
+                    Collections.singletonList(new Record("Excluded Count", String.valueOf(excludedCount),
+                            "Non-Excluded Count: " + nonExcludedRecords.size()))
+            );
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ReconciliationResult(Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        }
+    }
+
+    public ReconciliationResult match(String type, String algoPath, String starPath) {
+        List<Record> matched = new ArrayList<>();
+        List<Record> unmatched = new ArrayList<>();
+
+        try {
+            List<String> algoKeys = new ArrayList<>();
+            for (CSVRecord record : nonExcludedAlgo) {
+                String key = record.get("Agreement_name")
+                        .replace("_RIMP", "3CP")
+                        .replace("_RIMR", "3CR")
+                        .replaceAll("\\s+", "").trim();
+                algoKeys.add(key);
+            }
+
+            Map<String, List<Integer>> starKeyMap = new HashMap<>();
+            List<String> starKeys = new ArrayList<>();
+            for (int i = 0; i < nonExcludedStar.size(); i++) {
+                CSVRecord record = nonExcludedStar.get(i);
+                String key = record.get("CRDS Party Code").replaceAll("\\s+", "") +
+                        "3" + record.get("Post Direction").replaceAll("\\s+", "").trim();
+                starKeys.add(key);
+                starKeyMap.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
+            }
+
+            Set<Integer> matchedAlgoIndexes = new HashSet<>();
+            Set<Integer> matchedStarIndexes = new HashSet<>();
+
+            for (int i = 0; i < algoKeys.size(); i++) {
+                String algoKey = algoKeys.get(i);
+                List<Integer> matchIndexes = starKeyMap.getOrDefault(algoKey, new ArrayList<>());
+
+                switch (type.toLowerCase()) {
+                    case "one-to-one":
+                        if (matchIndexes.size() == 1 && !matchedStarIndexes.contains(matchIndexes.get(0))) {
+                            matched.add(new Record(algoKey, starKeys.get(matchIndexes.get(0)), "Match 1-1"));
+                            matchedAlgoIndexes.add(i);
+                            matchedStarIndexes.add(matchIndexes.get(0));
+                        } else {
+                            unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                        }
+                        break;
+
+                    case "one-to-many":
+                        if (!matchIndexes.isEmpty()) {
+                            for (Integer idx : matchIndexes) {
+                                matched.add(new Record(algoKey, starKeys.get(idx), "Match 1-M"));
+                                matchedStarIndexes.add(idx);
+                            }
+                            matchedAlgoIndexes.add(i);
+                        } else {
+                            unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                        }
+                        break;
+
+                    case "many-to-one":
+                        if (!matchIndexes.isEmpty()) {
+                            matched.add(new Record(algoKey, starKeys.get(matchIndexes.get(0)), "Match M-1"));
+                            matchedAlgoIndexes.add(i);
+                            matchedStarIndexes.add(matchIndexes.get(0));
+                        } else {
+                            unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                        }
+                        break;
+
+                    case "many-to-many":
+                        if (!matchIndexes.isEmpty()) {
+                            for (Integer idx : matchIndexes) {
+                                matched.add(new Record(algoKey, starKeys.get(idx), "Match M-M"));
+                                matchedStarIndexes.add(idx);
+                            }
+                            matchedAlgoIndexes.add(i);
+                        } else {
+                            unmatched.add(new Record(algoKey, "<No Match>", "Mismatch"));
+                        }
+                        break;
+
+                    default:
+                        unmatched.add(new Record(algoKey, "<Invalid Type>", "Error"));
+                }
+            }
+
+            // Update for next round of matching
+            List<CSVRecord> nextAlgo = new ArrayList<>();
+            for (int i = 0; i < nonExcludedAlgo.size(); i++) {
+                if (!matchedAlgoIndexes.contains(i)) nextAlgo.add(nonExcludedAlgo.get(i));
+            }
+
+            List<CSVRecord> nextStar = new ArrayList<>();
+            for (int i = 0; i < nonExcludedStar.size(); i++) {
+                if (!matchedStarIndexes.contains(i)) nextStar.add(nonExcludedStar.get(i));
+            }
+
+            nonExcludedAlgo = nextAlgo;
+            nonExcludedStar = nextStar;
+
+            return new ReconciliationResult(matched, unmatched,
+                    Collections.singletonList(new Record("Remaining Unmatched Count", String.valueOf(unmatched.size()),
+                            "Matched Count: " + matched.size())));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ReconciliationResult(Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        }
+    }
+}package com.example.reconciliation.model;
+
+import java.util.List;
+
+public class ReconciliationResult {
+    private List<Record> matchedRecords;
+    private List<Record> unmatchedRecords;
+    private List<Record> summary;
+
+    public ReconciliationResult() {}
+
+    public ReconciliationResult(List<Record> matchedRecords, List<Record> unmatchedRecords, List<Record> summary) {
+        this.matchedRecords = matchedRecords;
+        this.unmatchedRecords = unmatchedRecords;
+        this.summary = summary;
+    }
+
+    public List<Record> getMatchedRecords() {
+        return matchedRecords;
+    }
+
+    public void setMatchedRecords(List<Record> matchedRecords) {
+        this.matchedRecords = matchedRecords;
+    }
+
+    public List<Record> getUnmatchedRecords() {
+        return unmatchedRecords;
+    }
+
+    public void setUnmatchedRecords(List<Record> unmatchedRecords) {
+        this.unmatchedRecords = unmatchedRecords;
+    }
+
+    public List<Record> getSummary() {
+        return summary;
+    }
+
+    public void setSummary(List<Record> summary) {
+        this.summary = summary;
+    }
+}
+
+
+
+
+package com.example.reconciliation.model;
+
+public class Record {
+    private String algoKey;
+    private String starKey;
+    private String status;
+
+    public Record() {}
+
+    public Record(String algoKey, String starKey, String status) {
+        this.algoKey = algoKey;
+        this.starKey = starKey;
+        this.status = status;
+    }
+
+    public String getAlgoKey() {
+        return algoKey;
+    }
+
+    public void setAlgoKey(String algoKey) {
+        this.algoKey = algoKey;
+    }
+
+    public String getStarKey() {
+        return starKey;
+    }
+
+    public void setStarKey(String starKey) {
+        this.starKey = starKey;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+}
