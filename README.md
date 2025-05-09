@@ -389,3 +389,59 @@ public ReconciliationResult excludeAndTransform(String algoPath, String starPath
         return new ReconciliationResult(Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
     }
 }
+
+
+
+
+
+public ReconciliationResult excludeAndTransform(String algoPath, String starPath) {
+    try {
+        CSVParser algoParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(algoPath));
+        CSVParser starParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(new FileReader(starPath));
+
+        List<CSVRecord> algoRecords = algoParser.getRecords();
+        List<CSVRecord> starRecords = starParser.getRecords();
+
+        nonExcludedAlgo.clear();
+        nonExcludedStar.clear();
+        excludedRecords.clear();
+
+        for (CSVRecord record : starRecords) {
+            String maturityDate = record.get("Maturity Date").trim().toLowerCase();
+            if (maturityDate.contains("1900")) {
+                excludedRecords.add(new Record(
+                    "<Excluded>",
+                    record.get("CRDS Party Code").replaceAll("\\s+", "") +
+                    "3" + record.get("Post Direction").replaceAll("\\s+", ""),
+                    "Excluded by Maturity Date"));
+            } else {
+                nonExcludedStar.add(record);
+            }
+        }
+
+        nonExcludedAlgo.addAll(algoRecords);
+
+        // Prepare transformed non-excluded STAR records
+        List<Record> transformedNonExcluded = new ArrayList<>();
+        for (CSVRecord record : nonExcludedStar) {
+            String starKey = record.get("CRDS Party Code").replaceAll("\\s+", "") +
+                             "3" + record.get("Post Direction").replaceAll("\\s+", "").trim();
+            transformedNonExcluded.add(new Record("<Non-Excluded>", starKey, "Eligible for Matching"));
+        }
+
+        // Add count info to the excluded list
+        List<Record> countSummary = new ArrayList<>();
+        countSummary.add(new Record("Excluded Count", String.valueOf(excludedRecords.size()), "Summary"));
+        countSummary.add(new Record("Non-Excluded Count", String.valueOf(nonExcludedStar.size()), "Summary"));
+
+        return new ReconciliationResult(
+            Collections.emptyList(),       // matched
+            transformedNonExcluded,       // show non-excluded STAR records
+            countSummary                   // show counts
+        );
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return new ReconciliationResult(Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+    }
+}
