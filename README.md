@@ -1,152 +1,119 @@
 @Service
 public class ReconciliationService {
 
-    private Map<String, CSVRecord> nonExcludedStarRecords = new HashMap<>();
-    private Map<String, CSVRecord> excludedStarRecords = new HashMap<>();
-    private Map<String, CSVRecord> algoRecordsMap = new HashMap<>();
+    private List<Map<String, String>> nonExcludedFile1;
+    private List<Map<String, String>> nonExcludedFile2;
 
-    public void excludeByMaturity(String algoPath, String starPath) throws IOException {
-        CSVParser algoParser = CSVFormat.DEFAULT.withFirstRecordAsHeader()
-                .parse(new FileReader(algoPath));
-        CSVParser starParser = CSVFormat.DEFAULT.withFirstRecordAsHeader()
-                .parse(new FileReader(starPath));
+    public Map<String, Object> excludeRecords(String file1Path, String file2Path, String exclusionColumn, String exclusionValue) {
+        List<Map<String, String>> file1Records = readCSV(file1Path);
+        List<Map<String, String>> file2Records = readCSV(file2Path);
 
-        nonExcludedStarRecords.clear();
-        excludedStarRecords.clear();
-        algoRecordsMap.clear();
+        Predicate<Map<String, String>> excludePredicate = record ->
+                exclusionValue.equalsIgnoreCase(record.getOrDefault(exclusionColumn, "").trim());
 
-        for (CSVRecord record : starParser.getRecords()) {
-            String maturityDate = record.get("Maturity Date").trim().toLowerCase();
-            String starKey = record.get("CRDS Party Code").replaceAll("\\s", "") +
-                             "3" + record.get("Post Direction").replaceAll("\\s", "");
+        Map<String, Object> response = new HashMap<>();
+        List<Map<String, String>> excluded1 = file1Records.stream().filter(excludePredicate).toList();
+        List<Map<String, String>> nonExcluded1 = file1Records.stream().filter(excludePredicate.negate()).toList();
 
-            if (maturityDate.contains("1900")) {
-                excludedStarRecords.put(starKey, record);
-            } else {
-                nonExcludedStarRecords.put(starKey, record);
-            }
-        }
+        List<Map<String, String>> excluded2 = file2Records.stream().filter(excludePredicate).toList();
+        List<Map<String, String>> nonExcluded2 = file2Records.stream().filter(excludePredicate.negate()).toList();
 
-        for (CSVRecord record : algoParser.getRecords()) {
-            String transformedKey = record.get("AGREEMENT_NAME")
-                    .replace("_RIMP", "_3CP")
-                    .replace("_RIMR", "_3CR")
-                    .replaceAll("\\s", "");
-            algoRecordsMap.put(transformedKey, record);
-        }
+        nonExcludedFile1 = nonExcluded1;
+        nonExcludedFile2 = nonExcluded2;
+
+        response.put("exclusionSummary", Map.of(
+                "excludedCountFile1", excluded1.size(),
+                "nonExcludedCountFile1", nonExcluded1.size(),
+                "excludedCountFile2", excluded2.size(),
+                "nonExcludedCountFile2", nonExcluded2.size()
+        ));
+        response.put("excludedRecordsFile1", excluded1);
+        response.put("excludedRecordsFile2", excluded2);
+        response.put("nonExcludedRecordsFile1", nonExcluded1);
+        response.put("nonExcludedRecordsFile2", nonExcluded2);
+
+        return response;
     }
 
-    public ReconciliationResult performReconciliation(String matchType) {
-        Map<String, CSVRecord> matched = new HashMap<>();
-        Map<String, CSVRecord> unmatchedAlgo = new HashMap<>(algoRecordsMap);
-        Map<String, CSVRecord> unmatchedStar = new HashMap<>(nonExcludedStarRecords);
+    public Map<String, Object> matchRecords(String matchType) {
+        List<Map<String, String>> file1 = new ArrayList<>(nonExcludedFile1);
+        List<Map<String, String>> file2 = new ArrayList<>(nonExcludedFile2);
 
-        switch (matchType.toLowerCase()) {
-            case "1-1":
-                performOneToOneMatch(unmatchedAlgo, unmatchedStar, matched);
-                break;
-            case "1-many":
-                performOneToManyMatch(unmatchedAlgo, unmatchedStar, matched);
-                break;
-            case "many-1":
-                performManyToOneMatch(unmatchedAlgo, unmatchedStar, matched);
-                break;
-            case "many-many":
-                performManyToManyMatch(unmatchedAlgo, unmatchedStar, matched);
-                break;
-            case "cascade":
-                performOneToOneMatch(unmatchedAlgo, unmatchedStar, matched);
-                performOneToManyMatch(unmatchedAlgo, unmatchedStar, matched);
-                performManyToOneMatch(unmatchedAlgo, unmatchedStar, matched);
-                performManyToManyMatch(unmatchedAlgo, unmatchedStar, matched);
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported match type: " + matchType);
-        }
+        List<Map<String, Object>> matched = new ArrayList<>();
+        List<Map<String, Object>> unmatchedFile1 = new ArrayList<>(file1);
+        List<Map<String, Object>> unmatchedFile2 = new ArrayList<>(file2);
 
-        return new ReconciliationResult(
-                matched.values(),
-                unmatchedAlgo.values(),
-                unmatchedStar.values(),
-                excludedStarRecords.values()
-        );
-    }
-
-    private void performOneToOneMatch(Map<String, CSVRecord> algo, Map<String, CSVRecord> star, Map<String, CSVRecord> matched) {
-        Iterator<Map.Entry<String, CSVRecord>> iterator = algo.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, CSVRecord> entry = iterator.next();
-            String key = entry.getKey();
-            if (star.containsKey(key)) {
-                matched.put(key, entry.getValue());
-                star.remove(key);
-                iterator.remove();
-            }
-        }
-    }
-
-    private void performOneToManyMatch(Map<String, CSVRecord> algo, Map<String, CSVRecord> star, Map<String, CSVRecord> matched) {
-        // Example logic: pick first star match for each algo
-        for (String key : new HashSet<>(algo.keySet())) {
-            String prefix = key.substring(0, key.length() - 3); // just as an example
-            for (String starKey : star.keySet()) {
-                if (starKey.startsWith(prefix)) {
-                    matched.put(key, algo.get(key));
-                    star.remove(starKey);
-                    algo.remove(key);
+        for (Map<String, String> rec1 : file1) {
+            for (Map<String, String> rec2 : file2) {
+                if (rec1.equals(rec2)) {
+                    matched.add(Map.of("file1", rec1, "file2", rec2, "status", "MATCHED"));
+                    unmatchedFile1.remove(rec1);
+                    unmatchedFile2.remove(rec2);
                     break;
                 }
             }
         }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("matchType", matchType);
+        result.put("matchedCount", matched.size());
+        result.put("unmatchedFile1Count", unmatchedFile1.size());
+        result.put("unmatchedFile2Count", unmatchedFile2.size());
+        result.put("matchedRecords", matched);
+        result.put("unmatchedFile1Records", unmatchedFile1);
+        result.put("unmatchedFile2Records", unmatchedFile2);
+
+        return result;
     }
 
-    private void performManyToOneMatch(Map<String, CSVRecord> algo, Map<String, CSVRecord> star, Map<String, CSVRecord> matched) {
-        // Reverse: find star keys that match any part of algo keys
-        for (String starKey : new HashSet<>(star.keySet())) {
-            String prefix = starKey.substring(0, starKey.length() - 3); // example logic
-            for (String algoKey : algo.keySet()) {
-                if (algoKey.startsWith(prefix)) {
-                    matched.put(algoKey, algo.get(algoKey));
-                    star.remove(starKey);
-                    algo.remove(algoKey);
-                    break;
-                }
+    private List<Map<String, String>> readCSV(String filePath) {
+        List<Map<String, String>> records = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(Paths.get(filePath));
+             CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
+            for (CSVRecord record : csvParser) {
+                Map<String, String> row = new HashMap<>();
+                record.toMap().forEach(row::put);
+                records.add(row);
             }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read file: " + filePath, e);
         }
-    }
-
-    private void performManyToManyMatch(Map<String, CSVRecord> algo, Map<String, CSVRecord> star, Map<String, CSVRecord> matched) {
-        // Brute force match if key contains similar part
-        for (String ak : new HashSet<>(algo.keySet())) {
-            for (String sk : new HashSet<>(star.keySet())) {
-                if (ak.contains(sk) || sk.contains(ak)) {
-                    matched.put(ak, algo.get(ak));
-                    star.remove(sk);
-                    algo.remove(ak);
-                    break;
-                }
-            }
-        }
+        return records;
     }
 }
 
 
 
-public class ReconciliationResult {
-    private Collection<CSVRecord> matchedRecords;
-    private Collection<CSVRecord> unmatchedAlgo;
-    private Collection<CSVRecord> unmatchedStar;
-    private Collection<CSVRecord> excludedRecords;
 
-    public ReconciliationResult(Collection<CSVRecord> matchedRecords,
-                                Collection<CSVRecord> unmatchedAlgo,
-                                Collection<CSVRecord> unmatchedStar,
-                                Collection<CSVRecord> excludedRecords) {
-        this.matchedRecords = matchedRecords;
-        this.unmatchedAlgo = unmatchedAlgo;
-        this.unmatchedStar = unmatchedStar;
-        this.excludedRecords = excludedRecords;
+
+
+
+@RestController
+@RequestMapping("/reconciliation")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    @GetMapping("/exclude")
+    public ResponseEntity<Map<String, Object>> excludeRecords(
+            @RequestParam String file1Path,
+            @RequestParam String file2Path,
+            @RequestParam String exclusionColumn,
+            @RequestParam String exclusionValue
+    ) {
+        Map<String, Object> result = reconciliationService.excludeRecords(file1Path, file2Path, exclusionColumn, exclusionValue);
+        return ResponseEntity.ok(result);
     }
 
-    // Getters and setters
+    @GetMapping("/match")
+    public ResponseEntity<Map<String, Object>> matchRecords(
+            @RequestParam String matchType // "1-1", "1-many", "many-1", "many-many"
+    ) {
+        Map<String, Object> result = reconciliationService.matchRecords(matchType);
+        return ResponseEntity.ok(result);
+    }
 }
+
+
+
