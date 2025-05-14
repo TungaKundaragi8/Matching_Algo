@@ -257,3 +257,218 @@ public class ReconciliationService {
         return records;
     }
 }
+
+
+
+
+
+
+
+
+
+
+@Service
+public class ReconciliationService {
+
+    private List<Map<String, String>> nonExcludedFile1 = new ArrayList<>();
+    private List<Map<String, String>> nonExcludedFile2 = new ArrayList<>();
+    private List<Map<String, String>> excludedFile1 = new ArrayList<>();
+
+    public Map<String, Object> applyExclusion(
+            String file1Path,
+            String file2Path,
+            String exclusionColumn,
+            String exclusionValue
+    ) {
+        nonExcludedFile1.clear();
+        nonExcludedFile2.clear();
+        excludedFile1.clear();
+
+        List<Map<String, String>> file1Data = readCsv(file1Path);
+        List<Map<String, String>> file2Data = readCsv(file2Path);
+
+        for (Map<String, String> row : file1Data) {
+            if (exclusionValue.equalsIgnoreCase(row.getOrDefault(exclusionColumn, ""))) {
+                excludedFile1.add(row);
+            } else {
+                nonExcludedFile1.add(row);
+            }
+        }
+
+        nonExcludedFile2.addAll(file2Data); // no exclusion for file2
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("excludedCount", excludedFile1.size());
+        result.put("nonExcludedCount", nonExcludedFile1.size());
+        result.put("excludedRecords", excludedFile1);
+        result.put("nonExcludedRecords", nonExcludedFile1);
+        return result;
+    }
+
+    public Map<String, Object> performMatching(String type, String column1, String column2) {
+        List<Map<String, String>> matched = new ArrayList<>();
+        List<Map<String, String>> unmatched = new ArrayList<>();
+
+        switch (type.toLowerCase()) {
+            case "1-1":
+                oneToOneMatch(column1, column2, matched, unmatched);
+                break;
+            case "1-many":
+                oneToManyMatch(column1, column2, matched, unmatched);
+                break;
+            case "many-1":
+                manyToOneMatch(column1, column2, matched, unmatched);
+                break;
+            case "many-many":
+                manyToManyMatch(column1, column2, matched, unmatched);
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid match type");
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("matchType", type);
+        result.put("matchedCount", matched.size());
+        result.put("unmatchedCount", unmatched.size());
+        result.put("matchedRecords", matched);
+        result.put("unmatchedRecords", unmatched);
+        return result;
+    }
+
+    private void oneToOneMatch(String col1, String col2, List<Map<String, String>> matched, List<Map<String, String>> unmatched) {
+        Set<String> used = new HashSet<>();
+        for (Map<String, String> row1 : nonExcludedFile1) {
+            String val1 = row1.getOrDefault(col1, "").trim();
+            boolean found = false;
+            for (Map<String, String> row2 : nonExcludedFile2) {
+                String val2 = row2.getOrDefault(col2, "").trim();
+                if (val1.equalsIgnoreCase(val2) && !used.contains(val2)) {
+                    Map<String, String> combined = new HashMap<>();
+                    combined.putAll(row1);
+                    combined.putAll(row2);
+                    matched.add(combined);
+                    used.add(val2);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) unmatched.add(row1);
+        }
+    }
+
+    private void oneToManyMatch(String col1, String col2, List<Map<String, String>> matched, List<Map<String, String>> unmatched) {
+        for (Map<String, String> row1 : nonExcludedFile1) {
+            String val1 = row1.getOrDefault(col1, "").trim();
+            boolean found = false;
+            for (Map<String, String> row2 : nonExcludedFile2) {
+                String val2 = row2.getOrDefault(col2, "").trim();
+                if (val1.equalsIgnoreCase(val2)) {
+                    Map<String, String> combined = new HashMap<>();
+                    combined.putAll(row1);
+                    combined.putAll(row2);
+                    matched.add(combined);
+                    found = true;
+                }
+            }
+            if (!found) unmatched.add(row1);
+        }
+    }
+
+    private void manyToOneMatch(String col1, String col2, List<Map<String, String>> matched, List<Map<String, String>> unmatched) {
+        for (Map<String, String> row2 : nonExcludedFile2) {
+            String val2 = row2.getOrDefault(col2, "").trim();
+            boolean found = false;
+            for (Map<String, String> row1 : nonExcludedFile1) {
+                String val1 = row1.getOrDefault(col1, "").trim();
+                if (val2.equalsIgnoreCase(val1)) {
+                    Map<String, String> combined = new HashMap<>();
+                    combined.putAll(row1);
+                    combined.putAll(row2);
+                    matched.add(combined);
+                    found = true;
+                }
+            }
+            if (!found) unmatched.add(row2);
+        }
+    }
+
+    private void manyToManyMatch(String col1, String col2, List<Map<String, String>> matched, List<Map<String, String>> unmatched) {
+        Set<String> matchedKeys = new HashSet<>();
+        for (Map<String, String> row1 : nonExcludedFile1) {
+            String val1 = row1.getOrDefault(col1, "").trim();
+            boolean found = false;
+            for (Map<String, String> row2 : nonExcludedFile2) {
+                String val2 = row2.getOrDefault(col2, "").trim();
+                if (val1.equalsIgnoreCase(val2)) {
+                    Map<String, String> combined = new HashMap<>();
+                    combined.putAll(row1);
+                    combined.putAll(row2);
+                    matched.add(combined);
+                    matchedKeys.add(val1);
+                    found = true;
+                }
+            }
+            if (!found) unmatched.add(row1);
+        }
+    }
+
+    private List<Map<String, String>> readCsv(String path) {
+        List<Map<String, String>> records = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+            String[] headers = reader.readLine().split(",");
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] values = line.split(",");
+                Map<String, String> row = new HashMap<>();
+                for (int i = 0; i < headers.length && i < values.length; i++) {
+                    row.put(headers[i].trim(), values[i].trim());
+                }
+                records.add(row);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read CSV: " + path, e);
+        }
+        return records;
+    }
+}
+
+
+
+
+
+
+@RestController
+@RequestMapping("/reconciliation")
+public class ReconciliationController {
+
+    private final ReconciliationService reconciliationService;
+
+    public ReconciliationController(ReconciliationService reconciliationService) {
+        this.reconciliationService = reconciliationService;
+    }
+
+    @GetMapping("/exclude")
+    public ResponseEntity<Map<String, Object>> exclude(
+            @RequestParam String file1Path,
+            @RequestParam String file2Path,
+            @RequestParam String exclusionColumn,
+            @RequestParam String exclusionValue
+    ) {
+        Map<String, Object> result = reconciliationService.applyExclusion(
+                file1Path, file2Path, exclusionColumn, exclusionValue
+        );
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/match")
+    public ResponseEntity<Map<String, Object>> match(
+            @RequestParam String type,
+            @RequestParam String column1,
+            @RequestParam String column2
+    ) {
+        Map<String, Object> result = reconciliationService.performMatching(
+                type, column1, column2
+        );
+        return ResponseEntity.ok(result);
+    }
+}
