@@ -154,3 +154,106 @@ public void performMatching(String matchType, String column1, String column2) {
     }
 }
 
+
+
+
+
+@Service
+public class ReconciliationService {
+
+    private List<Map<String, String>> nonExcludedFile1 = new ArrayList<>();
+    private List<Map<String, String>> nonExcludedFile2 = new ArrayList<>();
+    private List<Map<String, String>> excludedFile1 = new ArrayList<>();
+
+    public Map<String, Object> applyExclusion(
+            String file1Path,
+            String file2Path,
+            String exclusionColumn,
+            String exclusionValue
+    ) {
+        nonExcludedFile1.clear();
+        nonExcludedFile2.clear();
+        excludedFile1.clear();
+
+        List<Map<String, String>> file1Data = readCsv(file1Path);
+        List<Map<String, String>> file2Data = readCsv(file2Path);
+
+        for (Map<String, String> row : file1Data) {
+            if (exclusionValue.equalsIgnoreCase(row.getOrDefault(exclusionColumn, ""))) {
+                excludedFile1.add(row);
+            } else {
+                nonExcludedFile1.add(row);
+            }
+        }
+
+        nonExcludedFile2.addAll(file2Data); // assuming no exclusion needed on file 2
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("excludedCount", excludedFile1.size());
+        result.put("nonExcludedCount", nonExcludedFile1.size());
+        result.put("excludedRecords", excludedFile1);
+        result.put("nonExcludedRecords", nonExcludedFile1);
+        return result;
+    }
+
+    public Map<String, Object> performMatching(
+            String type,
+            String column1,
+            String column2
+    ) {
+        List<Map<String, String>> matched = new ArrayList<>();
+        List<Map<String, String>> unmatched = new ArrayList<>();
+
+        Set<String> seen = new HashSet<>();
+
+        for (Map<String, String> row1 : nonExcludedFile1) {
+            String val1 = row1.getOrDefault(column1, "").trim();
+            boolean found = false;
+
+            for (Map<String, String> row2 : nonExcludedFile2) {
+                String val2 = row2.getOrDefault(column2, "").trim();
+
+                if (val1.equalsIgnoreCase(val2)) {
+                    Map<String, String> combined = new HashMap<>();
+                    combined.putAll(row1);
+                    combined.putAll(row2);
+                    matched.add(combined);
+                    seen.add(val2);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                unmatched.add(row1);
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("matchType", type);
+        result.put("matchedCount", matched.size());
+        result.put("unmatchedCount", unmatched.size());
+        result.put("matchedRecords", matched);
+        result.put("unmatchedRecords", unmatched);
+        return result;
+    }
+
+    private List<Map<String, String>> readCsv(String path) {
+        List<Map<String, String>> records = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+            String[] headers = reader.readLine().split(",");
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] values = line.split(",");
+                Map<String, String> row = new HashMap<>();
+                for (int i = 0; i < headers.length && i < values.length; i++) {
+                    row.put(headers[i].trim(), values[i].trim());
+                }
+                records.add(row);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read CSV: " + path, e);
+        }
+        return records;
+    }
+}
