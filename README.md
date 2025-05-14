@@ -117,3 +117,40 @@ public class ReconciliationController {
 
 
 
+
+
+
+@GetMapping("/reconciliation/match/{type}")
+public ResponseEntity<?> matchRecords(
+    @PathVariable("type") String matchType,
+    @RequestParam("column1") String column1,  // from ALGO
+    @RequestParam("column2") String column2   // from STAR
+) {
+    reconciliationService.performMatching(matchType, column1, column2);
+    return ResponseEntity.ok("Matching complete");
+}
+
+
+
+
+
+public void performMatching(String matchType, String column1, String column2) {
+    List<AlgoRecord> algoRecords = algoRepository.findAllNonExcluded();
+    List<StarRecord> starRecords = starRepository.findAllNonExcluded();
+
+    Map<String, AlgoRecord> algoMap = new HashMap<>();
+    for (AlgoRecord a : algoRecords) {
+        String key = getFieldValue(a, column1);
+        algoMap.put(key, a);
+    }
+
+    for (StarRecord s : starRecords) {
+        String key = getFieldValue(s, column2);
+        if (algoMap.containsKey(key)) {
+            // Save as matched
+        } else {
+            // Save as unmatched
+        }
+    }
+}
+
