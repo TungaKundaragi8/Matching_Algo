@@ -683,3 +683,161 @@ public class ReconciliationController {
         return ResponseEntity.ok(service.performMatchingCascade(column1, column2));
     }
 }
+
+
+
+// ReconciliationController.java @RestController @RequestMapping("/reconcile") public class ReconciliationController {
+
+@Autowired
+private ReconciliationService reconciliationService;
+
+@GetMapping("/upload")
+public ResponseEntity<String> uploadFiles(@RequestParam String file1Path, @RequestParam String file2Path) {
+    reconciliationService.loadFiles(file1Path, file2Path);
+    return ResponseEntity.ok("Files uploaded successfully");
+}
+
+@GetMapping("/update")
+public ResponseEntity<Map<String, Object>> updateColumns(@RequestParam String column, @RequestParam String from, @RequestParam String to) {
+    Map<String, Object> result = reconciliationService.applyUpdates(column, from, to);
+    return ResponseEntity.ok(result);
+}
+
+@GetMapping("/exclude")
+public ResponseEntity<Map<String, Object>> excludeRecords(@RequestParam String column, @RequestParam String value) {
+    Map<String, Object> result = reconciliationService.excludeRecords(column, value);
+    return ResponseEntity.ok(result);
+}
+
+@GetMapping("/match")
+public ResponseEntity<Map<String, Object>> performAllMatching(@RequestParam String column1, @RequestParam String column2) {
+    Map<String, Object> result = reconciliationService.matchAll(column1, column2);
+    return ResponseEntity.ok(result);
+}
+
+}
+
+// ReconciliationService.java @Service public class ReconciliationService {
+
+private List<Map<String, String>> originalFile1;
+private List<Map<String, String>> originalFile2;
+private List<Map<String, String>> updatedFile1;
+private List<Map<String, String>> updatedFile2;
+private List<Map<String, String>> nonExcludedFile1;
+private List<Map<String, String>> nonExcludedFile2;
+
+public void loadFiles(String file1Path, String file2Path) {
+    originalFile1 = readCSV(file1Path);
+    originalFile2 = readCSV(file2Path);
+    updatedFile1 = new ArrayList<>(originalFile1);
+    updatedFile2 = new ArrayList<>(originalFile2);
+}
+
+public Map<String, Object> applyUpdates(String column, String from, String to) {
+    updatedFile1.forEach(row -> row.computeIfPresent(column, (k, v) -> v.replace(from, to)));
+    updatedFile2.forEach(row -> row.computeIfPresent(column, (k, v) -> v.replace(from, to)));
+    return Map.of("message", "Updates applied successfully", "updatedCountFile1", updatedFile1.size(), "updatedCountFile2", updatedFile2.size());
+}
+
+public Map<String, Object> excludeRecords(String column, String value) {
+    Predicate<Map<String, String>> predicate = row -> value.equalsIgnoreCase(row.getOrDefault(column, "").trim());
+    List<Map<String, String>> excluded1 = updatedFile1.stream().filter(predicate).toList();
+    List<Map<String, String>> excluded2 = updatedFile2.stream().filter(predicate).toList();
+
+    nonExcludedFile1 = updatedFile1.stream().filter(predicate.negate()).collect(Collectors.toList());
+    nonExcludedFile2 = updatedFile2.stream().filter(predicate.negate()).collect(Collectors.toList());
+
+    return Map.of(
+            "excludedCountFile1", excluded1.size(),
+            "excludedRecordsFile1", excluded1,
+            "excludedCountFile2", excluded2.size(),
+            "excludedRecordsFile2", excluded2,
+            "nonExcludedCountFile1", nonExcludedFile1.size(),
+            "nonExcludedRecordsFile1", nonExcludedFile1,
+            "nonExcludedCountFile2", nonExcludedFile2.size(),
+            "nonExcludedRecordsFile2", nonExcludedFile2
+    );
+}
+
+public Map<String, Object> matchAll(String col1, String col2) {
+    List<Map<String, String>> matched = new ArrayList<>();
+    List<Map<String, String>> unmatched1 = new ArrayList<>(nonExcludedFile1);
+    List<Map<String, String>> unmatched2 = new ArrayList<>(nonExcludedFile2);
+
+    List<String> types = List.of("1-1", "1-many", "many-1", "many-many");
+    Map<String, Object> matchResults = new LinkedHashMap<>();
+
+    for (String type : types) {
+        List<Map<String, String>> localMatched = new ArrayList<>();
+        List<Map<String, String>> stillUnmatched1 = new ArrayList<>();
+        List<Map<String, String>> stillUnmatched2 = new ArrayList<>();
+
+        match(unmatched1, unmatched2, col1, col2, type, localMatched, stillUnmatched1, stillUnmatched2);
+
+        matched.addAll(localMatched);
+        unmatched1 = stillUnmatched1;
+        unmatched2 = stillUnmatched2;
+
+        matchResults.put(type, Map.of(
+                "matchedCount", localMatched.size(),
+                "matchedRecords", localMatched,
+                "unmatchedCountFile1", unmatched1.size(),
+                "unmatchedCountFile2", unmatched2.size()
+        ));
+    }
+
+    matchResults.put("finalUnmatchedFile1", unmatched1);
+    matchResults.put("finalUnmatchedFile2", unmatched2);
+    return matchResults;
+}
+
+private void match(List<Map<String, String>> file1, List<Map<String, String>> file2, String col1, String col2,
+                   String type, List<Map<String, String>> matched, List<Map<String, String>> unmatched1,
+                   List<Map<String, String>> unmatched2) {
+
+    Set<Integer> usedIndexes = new HashSet<>();
+
+    for (int i = 0; i < file1.size(); i++) {
+        Map<String, String> row1 = file1.get(i);
+        String val1 = row1.getOrDefault(col1, "").trim();
+        boolean found = false;
+
+        for (int j = 0; j < file2.size(); j++) {
+            if (usedIndexes.contains(j) && type.equals("1-1")) continue;
+            Map<String, String> row2 = file2.get(j);
+            String val2 = row2.getOrDefault(col2, "").trim();
+
+            if (val1.equalsIgnoreCase(val2)) {
+                Map<String, String> combined = new HashMap<>();
+                combined.putAll(row1);
+                combined.putAll(row2);
+                matched.add(combined);
+                usedIndexes.add(j);
+                found = true;
+                if (type.equals("1-1") || type.equals("many-1")) break;
+            }
+        }
+        if (!found) unmatched1.add(row1);
+    }
+
+    for (int j = 0; j < file2.size(); j++) {
+        if (!usedIndexes.contains(j)) {
+            unmatched2.add(file2.get(j));
+        }
+    }
+}
+
+private List<Map<String, String>> readCSV(String filePath) {
+    try (BufferedReader reader = Files.newBufferedReader(Paths.get(filePath));
+         CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
+        List<Map<String, String>> records = new ArrayList<>();
+        for (CSVRecord record : parser) {
+            records.add(record.toMap());
+        }
+        return records;
+    } catch (IOException e) {
+        throw new RuntimeException("CSV read error: " + filePath, e);
+    }
+}
+
+}
