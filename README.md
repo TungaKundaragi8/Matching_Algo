@@ -1009,3 +1009,128 @@ public class ReconciliationController {
         return ResponseEntity.ok(result);
     }
 }
+
+
+
+
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class ReconciliationService {
+
+    private List<Map<String, String>> originalFile1 = new ArrayList<>();
+    private List<Map<String, String>> originalFile2 = new ArrayList<>();
+
+    private List<Map<String, String>> excludedFile1 = new ArrayList<>();
+    private List<Map<String, String>> excludedFile2 = new ArrayList<>();
+
+    private List<Map<String, String>> nonExcludedFile1 = new ArrayList<>();
+    private List<Map<String, String>> nonExcludedFile2 = new ArrayList<>();
+
+    // Load CSV files
+    public void loadFiles(String file1Path, String file2Path) {
+        originalFile1 = readCSV(file1Path);
+        originalFile2 = readCSV(file2Path);
+        // Clear previous states
+        excludedFile1.clear();
+        excludedFile2.clear();
+        nonExcludedFile1.clear();
+        nonExcludedFile2.clear();
+    }
+
+    // Update rule: apply multiple replacements on a specific column in both datasets
+    public Map<String, Object> applyUpdateRule(String column, Map<String, String> replacements) {
+        for (Map<String, String> record : originalFile1) {
+            String val = record.getOrDefault(column, "");
+            for (Map.Entry<String, String> entry : replacements.entrySet()) {
+                val = val.replace(entry.getKey(), entry.getValue());
+            }
+            record.put(column, val);
+        }
+        for (Map<String, String> record : originalFile2) {
+            String val = record.getOrDefault(column, "");
+            for (Map.Entry<String, String> entry : replacements.entrySet()) {
+                val = val.replace(entry.getKey(), entry.getValue());
+            }
+            record.put(column, val);
+        }
+
+        return Map.of(
+                "message", "Update rule applied successfully",
+                "updatedCountFile1", originalFile1.size(),
+                "updatedCountFile2", originalFile2.size()
+        );
+    }
+
+    // Exclusion rule: exclude records where column == excludeValue
+    public Map<String, Object> applyExclusionRule(String column, String excludeValue) {
+        excludedFile1 = originalFile1.stream()
+                .filter(r -> excludeValue.equalsIgnoreCase(r.getOrDefault(column, "").trim()))
+                .collect(Collectors.toList());
+
+        excludedFile2 = originalFile2.stream()
+                .filter(r -> excludeValue.equalsIgnoreCase(r.getOrDefault(column, "").trim()))
+                .collect(Collectors.toList());
+
+        nonExcludedFile1 = originalFile1.stream()
+                .filter(r -> !excludeValue.equalsIgnoreCase(r.getOrDefault(column, "").trim()))
+                .collect(Collectors.toList());
+
+        nonExcludedFile2 = originalFile2.stream()
+                .filter(r -> !excludeValue.equalsIgnoreCase(r.getOrDefault(column, "").trim()))
+                .collect(Collectors.toList());
+
+        return Map.of(
+                "excludedCountFile1", excludedFile1.size(),
+                "excludedRecordsFile1", excludedFile1,
+                "excludedCountFile2", excludedFile2.size(),
+                "excludedRecordsFile2", excludedFile2,
+                "nonExcludedCountFile1", nonExcludedFile1.size(),
+                "nonExcludedRecordsFile1", nonExcludedFile1,
+                "nonExcludedCountFile2", nonExcludedFile2.size(),
+                "nonExcludedRecordsFile2", nonExcludedFile2
+        );
+    }
+
+    // Helper method to read CSV as List<Map<String,String>>
+    private List<Map<String, String>> readCSV(String filePath) {
+        try (BufferedReader reader = Files.newBufferedReader(Paths.get(filePath));
+             CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
+            List<Map<String, String>> records = new ArrayList<>();
+            for (CSVRecord record : parser) {
+                records.add(record.toMap());
+            }
+            return records;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read CSV: " + filePath, e);
+        }
+    }
+
+    // Getters for excluded and non-excluded records (optional)
+    public List<Map<String, String>> getExcludedFile1() {
+        return excludedFile1;
+    }
+
+    public List<Map<String, String>> getExcludedFile2() {
+        return excludedFile2;
+    }
+
+    public List<Map<String, String>> getNonExcludedFile1() {
+        return nonExcludedFile1;
+    }
+
+    public List<Map<String, String>> getNonExcludedFile2() {
+        return nonExcludedFile2;
+    }
+}
