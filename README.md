@@ -841,3 +841,171 @@ private List<Map<String, String>> readCSV(String filePath) {
 }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@Service
+public class ReconciliationService {
+
+    private List<Map<String, String>> originalFile1;
+    private List<Map<String, String>> originalFile2;
+
+    private List<Map<String, String>> nonExcludedFile1;
+    private List<Map<String, String>> nonExcludedFile2;
+
+    // Unmatched after each matching type:
+    private List<Map<String, String>> unmatchedFile1;
+    private List<Map<String, String>> unmatchedFile2;
+
+    public void loadFiles(String file1Path, String file2Path) {
+        originalFile1 = readCSV(file1Path);
+        originalFile2 = readCSV(file2Path);
+        nonExcludedFile1 = new ArrayList<>(originalFile1);
+        nonExcludedFile2 = new ArrayList<>(originalFile2);
+        unmatchedFile1 = new ArrayList<>(nonExcludedFile1);
+        unmatchedFile2 = new ArrayList<>(nonExcludedFile2);
+    }
+
+    public Map<String, Object> excludeRecords(String column, String value) {
+        Predicate<Map<String, String>> predicate = row -> value.equalsIgnoreCase(row.getOrDefault(column, "").trim());
+
+        List<Map<String, String>> excluded1 = nonExcludedFile1.stream().filter(predicate).toList();
+        List<Map<String, String>> excluded2 = nonExcludedFile2.stream().filter(predicate).toList();
+
+        nonExcludedFile1 = nonExcludedFile1.stream().filter(predicate.negate()).collect(Collectors.toList());
+        nonExcludedFile2 = nonExcludedFile2.stream().filter(predicate.negate()).collect(Collectors.toList());
+
+        // Reset unmatched to non-excluded after exclusion
+        unmatchedFile1 = new ArrayList<>(nonExcludedFile1);
+        unmatchedFile2 = new ArrayList<>(nonExcludedFile2);
+
+        return Map.of(
+                "excludedCountFile1", excluded1.size(),
+                "excludedRecordsFile1", excluded1,
+                "excludedCountFile2", excluded2.size(),
+                "excludedRecordsFile2", excluded2,
+                "nonExcludedCountFile1", nonExcludedFile1.size(),
+                "nonExcludedRecordsFile1", nonExcludedFile1,
+                "nonExcludedCountFile2", nonExcludedFile2.size(),
+                "nonExcludedRecordsFile2", nonExcludedFile2
+        );
+    }
+
+    public Map<String, Object> matchByType(String type, String col1, String col2) {
+        List<Map<String, String>> matched = new ArrayList<>();
+        List<Map<String, String>> stillUnmatched1 = new ArrayList<>();
+        List<Map<String, String>> stillUnmatched2 = new ArrayList<>();
+
+        match(unmatchedFile1, unmatchedFile2, col1, col2, type, matched, stillUnmatched1, stillUnmatched2);
+
+        // Update unmatched lists after this match for next calls
+        unmatchedFile1 = stillUnmatched1;
+        unmatchedFile2 = stillUnmatched2;
+
+        return Map.of(
+                "matchType", type,
+                "matchedCount", matched.size(),
+                "matchedRecords", matched,
+                "unmatchedCountFile1", unmatchedFile1.size(),
+                "unmatchedRecordsFile1", unmatchedFile1,
+                "unmatchedCountFile2", unmatchedFile2.size(),
+                "unmatchedRecordsFile2", unmatchedFile2
+        );
+    }
+
+    private void match(List<Map<String, String>> file1, List<Map<String, String>> file2, String col1, String col2,
+                       String type, List<Map<String, String>> matched, List<Map<String, String>> unmatched1,
+                       List<Map<String, String>> unmatched2) {
+
+        Set<Integer> usedIndexes = new HashSet<>();
+
+        for (Map<String, String> row1 : file1) {
+            String val1 = row1.getOrDefault(col1, "").trim();
+            boolean found = false;
+
+            for (int j = 0; j < file2.size(); j++) {
+                if (usedIndexes.contains(j) && type.equals("1-1")) continue;
+                Map<String, String> row2 = file2.get(j);
+                String val2 = row2.getOrDefault(col2, "").trim();
+
+                if (val1.equalsIgnoreCase(val2)) {
+                    Map<String, String> combined = new HashMap<>();
+                    combined.putAll(row1);
+                    combined.putAll(row2);
+                    matched.add(combined);
+                    usedIndexes.add(j);
+                    found = true;
+                    if (type.equals("1-1") || type.equals("many-1")) break;
+                }
+            }
+            if (!found) unmatched1.add(row1);
+        }
+
+        for (int j = 0; j < file2.size(); j++) {
+            if (!usedIndexes.contains(j)) {
+                unmatched2.add(file2.get(j));
+            }
+        }
+    }
+
+    private List<Map<String, String>> readCSV(String filePath) {
+        try (BufferedReader reader = Files.newBufferedReader(Paths.get(filePath));
+             CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
+            List<Map<String, String>> records = new ArrayList<>();
+            for (CSVRecord record : parser) {
+                records.add(record.toMap());
+            }
+            return records;
+        } catch (IOException e) {
+            throw new RuntimeException("CSV read error: " + filePath, e);
+        }
+    }
+}
+
+
+
+
+@RestController
+@RequestMapping("/reconcile")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    @GetMapping("/upload")
+    public ResponseEntity<String> uploadFiles(@RequestParam String file1Path, @RequestParam String file2Path) {
+        reconciliationService.loadFiles(file1Path, file2Path);
+        return ResponseEntity.ok("Files uploaded successfully");
+    }
+
+    @GetMapping("/exclude")
+    public ResponseEntity<Map<String, Object>> excludeRecords(@RequestParam String column, @RequestParam String value) {
+        Map<String, Object> result = reconciliationService.excludeRecords(column, value);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/match/{type}")
+    public ResponseEntity<Map<String, Object>> performMatchingByType(@PathVariable String type,
+                                                                     @RequestParam String column1,
+                                                                     @RequestParam String column2) {
+        Map<String, Object> result = reconciliationService.matchByType(type, column1, column2);
+        return ResponseEntity.ok(result);
+    }
+}
