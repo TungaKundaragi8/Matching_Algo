@@ -1134,3 +1134,188 @@ public class ReconciliationService {
         return nonExcludedFile2;
     }
 }
+....................................................
+// File: ReconciliationController.java package com.example.reconciliation.controller;
+
+import com.example.reconciliation.model.Record; import com.example.reconciliation.service.ReconciliationService; import org.springframework.beans.factory.annotation.Autowired; import org.springframework.web.bind.annotation.*;
+
+import java.util.List; import java.util.Map;
+
+@RestController @RequestMapping("/reconcile") public class ReconciliationController {
+
+@Autowired
+private ReconciliationService reconciliationService;
+
+@GetMapping("/load")
+public String loadFiles(@RequestParam String file1Path, @RequestParam String file2Path) {
+    reconciliationService.loadFiles(file1Path, file2Path);
+    return "Files loaded and initial data prepared.";
+}
+
+@GetMapping("/update")
+public String applyUpdates(@RequestParam Map<String, String> updates) {
+    reconciliationService.applyUpdateRules(updates);
+    return "Update rules applied.";
+}
+
+@GetMapping("/exclude")
+public String applyExclusions(@RequestParam List<String> exclusionColumns, @RequestParam List<String> exclusionValues) {
+    reconciliationService.applyExclusionRules(exclusionColumns, exclusionValues);
+    return "Exclusion rules applied.";
+}
+
+@GetMapping("/match/one-to-one")
+public Map<String, Object> matchOneToOne(@RequestParam List<String> matchColumns) {
+    return reconciliationService.matchOneToOne(matchColumns);
+}
+
+@GetMapping("/match/one-to-many")
+public Map<String, Object> matchOneToMany(@RequestParam List<String> matchColumns) {
+    return reconciliationService.matchOneToMany(matchColumns);
+}
+
+@GetMapping("/match/many-to-one")
+public Map<String, Object> matchManyToOne(@RequestParam List<String> matchColumns) {
+    return reconciliationService.matchManyToOne(matchColumns);
+}
+
+@GetMapping("/match/many-to-many")
+public Map<String, Object> matchManyToMany(@RequestParam List<String> matchColumns) {
+    return reconciliationService.matchManyToMany(matchColumns);
+}
+
+}
+
+// File: ReconciliationService.java package com.example.reconciliation.service;
+
+import com.example.reconciliation.model.Record; import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader; import java.io.FileReader; import java.util.*; import java.util.stream.Collectors;
+
+@Service public class ReconciliationService { private List<Record> file1Records = new ArrayList<>(); private List<Record> file2Records = new ArrayList<>(); private List<Record> excludedRecords = new ArrayList<>(); private List<Record> matchedRecords = new ArrayList<>(); private List<Record> unmatchedRecords = new ArrayList<>();
+
+public void loadFiles(String path1, String path2) {
+    file1Records = loadCsv(path1);
+    file2Records = loadCsv(path2);
+    excludedRecords.clear();
+    matchedRecords.clear();
+    unmatchedRecords.clear();
+}
+
+public List<Record> loadCsv(String path) {
+    List<Record> records = new ArrayList<>();
+    try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+        String[] headers = reader.readLine().split(",");
+        String line;
+        while ((line = reader.readLine()) != null) {
+            String[] values = line.split(",");
+            Map<String, String> map = new HashMap<>();
+            for (int i = 0; i < headers.length; i++) {
+                map.put(headers[i], values[i]);
+            }
+            records.add(new Record(map));
+        }
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+    return records;
+}
+
+public void applyUpdateRules(Map<String, String> updates) {
+    for (Record r : file1Records) {
+        updates.forEach((col, val) -> {
+            if (r.getData().containsKey(col)) {
+                r.getData().put(col, val);
+            }
+        });
+    }
+    for (Record r : file2Records) {
+        updates.forEach((col, val) -> {
+            if (r.getData().containsKey(col)) {
+                r.getData().put(col, val);
+            }
+        });
+    }
+}
+
+public void applyExclusionRules(List<String> columns, List<String> values) {
+    file2Records = file2Records.stream().filter(r -> {
+        for (int i = 0; i < columns.size(); i++) {
+            if (r.getData().get(columns.get(i)).equals(values.get(i))) {
+                excludedRecords.add(r);
+                return false;
+            }
+        }
+        return true;
+    }).collect(Collectors.toList());
+}
+
+public Map<String, Object> matchOneToOne(List<String> matchColumns) {
+    matchedRecords.clear();
+    unmatchedRecords.clear();
+    List<Record> remainingFile2 = new ArrayList<>(file2Records);
+
+    for (Record r1 : file1Records) {
+        Optional<Record> match = remainingFile2.stream().filter(r2 -> matchColumns.stream()
+                .allMatch(c -> r1.getData().get(c).equals(r2.getData().get(c)))).findFirst();
+        if (match.isPresent()) {
+            matchedRecords.add(r1);
+            remainingFile2.remove(match.get());
+        } else {
+            unmatchedRecords.add(r1);
+        }
+    }
+
+    Map<String, Object> result = new HashMap<>();
+    result.put("matchedCount", matchedRecords.size());
+    result.put("unmatchedCount", unmatchedRecords.size());
+    result.put("excludedCount", excludedRecords.size());
+    result.put("matchedRecords", matchedRecords);
+    result.put("unmatchedRecords", unmatchedRecords);
+    result.put("excludedRecords", excludedRecords);
+    return result;
+}
+
+public Map<String, Object> matchOneToMany(List<String> matchColumns) {
+    // Similar to matchOneToOne, but allows r1 to match multiple r2s
+    // Implement similarly by collecting all matches
+    return Map.of("status", "one-to-many not yet implemented");
+}
+
+public Map<String, Object> matchManyToOne(List<String> matchColumns) {
+    // Reverse of one-to-many
+    return Map.of("status", "many-to-one not yet implemented");
+}
+
+public Map<String, Object> matchManyToMany(List<String> matchColumns) {
+    // Match all combinations that meet criteria
+    return Map.of("status", "many-to-many not yet implemented");
+}
+
+}
+
+// File: Record.java package com.example.reconciliation.model;
+
+import java.util.Map;
+
+public class Record { private Map<String, String> data;
+
+public Record(Map<String, String> data) {
+    this.data = data;
+}
+
+public Map<String, String> getData() {
+    return data;
+}
+
+public void setData(Map<String, String> data) {
+    this.data = data;
+}
+
+@Override
+public String toString() {
+    return data.toString();
+}
+
+}
+
