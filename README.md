@@ -1534,3 +1534,56 @@ public class ReconciliationController {
     }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+public Map<String, Object> applyUpdateRules(Map<String, String> rules) {
+    // Each entry in rules is like: rule1=AGREEMENT_NAME:_RIMP:_3CP
+    for (String ruleKey : rules.keySet()) {
+        String rule = rules.get(ruleKey);
+        // Split rule into 3 parts: columnName, fromValue, toValue
+        String[] parts = rule.split(":", 3);
+        if (parts.length == 3) {
+            String col = parts[0];
+            String fromVal = parts[1];
+            String toVal = parts[2];
+
+            // Update file1Records
+            for (Record r : file1Records) {
+                Map<String, String> data = r.getData();
+                if (data.containsKey(col) && data.get(col).contains(fromVal)) {
+                    data.put(col, data.get(col).replace(fromVal, toVal));
+                }
+            }
+            // Update file2Records
+            for (Record r : file2Records) {
+                Map<String, String> data = r.getData();
+                if (data.containsKey(col) && data.get(col).contains(fromVal)) {
+                    data.put(col, data.get(col).replace(fromVal, toVal));
+                }
+            }
+        }
+    }
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("message", "Update rules applied.");
+    response.put("file1UpdatedRecords", file1Records);
+    response.put("file2UpdatedRecords", file2Records);
+    return response;
+}
