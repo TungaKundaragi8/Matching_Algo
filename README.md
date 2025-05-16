@@ -1587,3 +1587,93 @@ public Map<String, Object> applyUpdateRules(Map<String, String> rules) {
     response.put("file2UpdatedRecords", file2Records);
     return response;
 }
+
+
+
+
+
+
+
+2. Controller:
+
+@GetMapping("/update")
+public Map<String, Object> applyUpdates(@RequestParam Map<String, String> rules) {
+    return reconciliationService.applyAdvancedUpdateRules(rules);
+}
+
+
+---
+
+3. Service Method:
+
+public Map<String, Object> applyAdvancedUpdateRules(Map<String, String> rules) {
+    for (String ruleKey : rules.keySet()) {
+        String rule = rules.get(ruleKey);
+        if (rule.contains(":=")) {
+            String[] parts = rule.split(":=", 2);
+            String targetCol = parts[0].trim();
+            String expression = parts[1].trim();
+
+            applyExpressionToRecords(file1Records, targetCol, expression);
+            applyExpressionToRecords(file2Records, targetCol, expression);
+        }
+    }
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("message", "Expression-based updates applied.");
+    response.put("file1UpdatedRecords", file1Records);
+    response.put("file2UpdatedRecords", file2Records);
+    return response;
+}
+
+
+---
+
+4. Helper Method (Apply expression):
+
+private void applyExpressionToRecords(List<Record> records, String targetCol, String expression) {
+    for (Record r : records) {
+        StringBuilder newValue = new StringBuilder();
+        String[] tokens = expression.split("\\+");
+
+        for (String token : tokens) {
+            token = token.trim();
+            if (r.getData().containsKey(token)) {
+                newValue.append(r.getData().get(token));
+            } else {
+                newValue.append(token); // literal value like "3"
+            }
+        }
+
+        r.getData().put(targetCol, newValue.toString());
+    }
+}
+
+
+
+
+public Map<String, Object> applyAdvancedUpdateRules(Map<String, String> rules) {
+    for (String ruleKey : rules.keySet()) {
+        String rule = rules.get(ruleKey);
+        if (rule.contains(":=")) {
+            String[] parts = rule.split(":=", 2);
+            String targetCol = parts[0].trim();
+            String expression = parts[1].trim();
+
+            applyExpressionToRecords(file1Records, targetCol, expression);
+            applyExpressionToRecords(file2Records, targetCol, expression);
+        }
+    }
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("message", "Expression-based updates applied.");
+    response.put("file1UpdatedRecords", file1Records);
+    response.put("file2UpdatedRecords", file2Records);
+    return response;
+}
+
+
+@GetMapping("/update")
+public Map<String, Object> applyUpdates(@RequestParam Map<String, String> rules) {
+    return reconciliationService.applyAdvancedUpdateRules(rules);
+}
