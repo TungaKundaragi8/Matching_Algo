@@ -1319,3 +1319,218 @@ public String toString() {
 
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package com.example.reconciliation.service;
+
+import com.example.reconciliation.model.Record;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class ReconciliationService {
+    private List<Record> file1Records = new ArrayList<>();
+    private List<Record> file2Records = new ArrayList<>();
+    private List<Record> excludedRecords = new ArrayList<>();
+    private List<Record> matchedRecords = new ArrayList<>();
+    private List<Record> unmatchedRecords = new ArrayList<>();
+
+    public Map<String, Object> loadFiles(String path1, String path2) {
+        file1Records = loadCsv(path1);
+        file2Records = loadCsv(path2);
+
+        // Clear others on load
+        excludedRecords.clear();
+        matchedRecords.clear();
+        unmatchedRecords.clear();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Files loaded successfully.");
+        response.put("file1RecordCount", file1Records.size());
+        response.put("file1Records", file1Records);
+        response.put("file2RecordCount", file2Records.size());
+        response.put("file2Records", file2Records);
+
+        return response;
+    }
+
+    private List<Record> loadCsv(String path) {
+        List<Record> records = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) return records;
+
+            String[] headers = headerLine.split(",");
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] values = line.split(",", -1);
+                if (values.length != headers.length) {
+                    // skip malformed row or log error if needed
+                    continue;
+                }
+                Map<String, String> map = new LinkedHashMap<>();
+                for (int i = 0; i < headers.length; i++) {
+                    map.put(headers[i].trim(), values[i].trim());
+                }
+                records.add(new Record(map));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return records;
+    }
+
+    public Map<String, Object> applyUpdateRules(Map<String, String> updates) {
+        // Apply updates on file1
+        for (Record r : file1Records) {
+            updates.forEach((col, val) -> {
+                if (r.getData().containsKey(col)) {
+                    r.getData().put(col, val);
+                }
+            });
+        }
+        // Apply updates on file2
+        for (Record r : file2Records) {
+            updates.forEach((col, val) -> {
+                if (r.getData().containsKey(col)) {
+                    r.getData().put(col, val);
+                }
+            });
+        }
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Update rules applied.");
+        response.put("file1UpdatedRecords", file1Records);
+        response.put("file2UpdatedRecords", file2Records);
+        return response;
+    }
+
+    public Map<String, Object> applyExclusionRules(List<String> columns, List<String> values) {
+        excludedRecords.clear();
+
+        List<Record> filtered = file2Records.stream().filter(r -> {
+            for (int i = 0; i < columns.size(); i++) {
+                String col = columns.get(i);
+                String val = values.get(i);
+                if (val.equals(r.getData().get(col))) {
+                    excludedRecords.add(r);
+                    return false; // exclude this record
+                }
+            }
+            return true;
+        }).collect(Collectors.toList());
+
+        file2Records = filtered;
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Exclusion rules applied.");
+        response.put("excludedRecordsCount", excludedRecords.size());
+        response.put("excludedRecords", excludedRecords);
+        response.put("remainingFile2RecordsCount", file2Records.size());
+        response.put("remainingFile2Records", file2Records);
+        return response;
+    }
+
+    public Map<String, Object> matchOneToOne(List<String> matchColumns) {
+        matchedRecords.clear();
+        unmatchedRecords.clear();
+
+        List<Record> file2Copy = new ArrayList<>(file2Records);
+
+        for (Record r1 : file1Records) {
+            Optional<Record> match = file2Copy.stream().filter(r2 -> matchColumns.stream()
+                    .allMatch(c -> Objects.equals(r1.getData().get(c), r2.getData().get(c)))).findFirst();
+
+            if (match.isPresent()) {
+                matchedRecords.add(r1);
+                file2Copy.remove(match.get());
+            } else {
+                unmatchedRecords.add(r1);
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("matchedCount", matchedRecords.size());
+        response.put("unmatchedCount", unmatchedRecords.size());
+        response.put("excludedCount", excludedRecords.size());
+
+        response.put("matchedRecords", matchedRecords);
+        response.put("unmatchedRecords", unmatchedRecords);
+        response.put("excludedRecords", excludedRecords);
+
+        response.put("file1RecordCount", file1Records.size());
+        response.put("file2RecordCount", file2Records.size());
+        response.put("file1Records", file1Records);
+        response.put("file2Records", file2Records);
+
+        return response;
+    }
+
+}
+
+
+
+
+package com.example.reconciliation.controller;
+
+import com.example.reconciliation.model.Record;
+import com.example.reconciliation.service.ReconciliationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/reconcile")
+public class ReconciliationController {
+
+    @Autowired
+    private ReconciliationService reconciliationService;
+
+    @GetMapping("/load")
+    public Map<String, Object> loadFiles(@RequestParam String file1Path, @RequestParam String file2Path) {
+        return reconciliationService.loadFiles(file1Path, file2Path);
+    }
+
+    @PostMapping("/update")
+    public Map<String, Object> applyUpdates(@RequestBody Map<String, String> updates) {
+        return reconciliationService.applyUpdateRules(updates);
+    }
+
+    @PostMapping("/exclude")
+    public Map<String, Object> applyExclusions(@RequestBody Map<String, List<String>> exclusionRules) {
+        // Expecting JSON: { "columns": [...], "values": [...] }
+        List<String> columns = exclusionRules.get("columns");
+        List<String> values = exclusionRules.get("values");
+        return reconciliationService.applyExclusionRules(columns, values);
+    }
+
+    @PostMapping("/match/one-to-one")
+    public Map<String, Object> matchOneToOne(@RequestBody List<String> matchColumns) {
+        return reconciliationService.matchOneToOne(matchColumns);
+    }
+
+}
