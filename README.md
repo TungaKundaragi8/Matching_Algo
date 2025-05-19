@@ -1691,3 +1691,26 @@ public Map<String, Object> applyExclusions(@RequestParam List<String> columns, @
 
 
 http://localhost:8080/exclude?columns=Name,Age&values=John%20Doe,25
+
+
+
+
+
+
+
+
+
+public Map<String, Object> applyUpdates(Map<String, String> fromValues, Map<String, String> toValues) {
+    fromValues.forEach((column, fromValue) -> {
+        String toValue = toValues.getOrDefault(column, fromValue);  // If `to` is not provided, keep the original value
+        updatedFile1.forEach(row -> row.computeIfPresent(column, (k, v) -> v.equals(fromValue) ? toValue : v));
+        updatedFile2.forEach(row -> row.computeIfPresent(column, (k, v) -> v.equals(fromValue) ? toValue : v));
+    });
+
+    return Map.of(
+        "updatedCountFile1", updatedFile1.size(),
+        "updatedCountFile2", updatedFile2.size(),
+        "UpdatedRecordsFile1", updatedFile1,
+        "UpdatedRecordsFile2", updatedFile2
+    );
+}
