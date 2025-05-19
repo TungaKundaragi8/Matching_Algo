@@ -1677,3 +1677,17 @@ public Map<String, Object> applyAdvancedUpdateRules(Map<String, String> rules) {
 public Map<String, Object> applyUpdates(@RequestParam Map<String, String> rules) {
     return reconciliationService.applyAdvancedUpdateRules(rules);
 }
+
+
+
+
+
+
+
+@GetMapping("/exclude")
+public Map<String, Object> applyExclusions(@RequestParam List<String> columns, @RequestParam List<String> values) {
+    return reconciliationService.applyExclusionRules(columns, values);
+}
+
+
+http://localhost:8080/exclude?columns=Name,Age&values=John%20Doe,25
