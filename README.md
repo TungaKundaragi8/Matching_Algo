@@ -1731,3 +1731,118 @@ private String resolvePlaceholders(String template, Map<String, String> rowData)
     matcher.appendTail(result);
     return result.toString();
 }
+
+
+................................
+@RestController
+@RequestMapping("/api")
+public class RecordController {
+
+    private List<Map<String, String>> updatedData = new ArrayList<>();
+    private List<Map<String, String>> nonExcluded = new ArrayList<>();
+
+    // 1. Update Endpoint
+    @PostMapping("/update")
+    public Map<String, Object> updateRecords(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("column") String column,
+            @RequestParam("oldValue") String oldValue,
+            @RequestParam("newValue") String newValue) throws IOException {
+
+        updatedData = parseCsv(file);
+        int count = 0;
+
+        for (Map<String, String> row : updatedData) {
+            if (row.containsKey(column) && row.get(column).equals(oldValue)) {
+                row.put(column, newValue);
+                count++;
+            }
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("updatedCount", count);
+        response.put("updatedRecords", updatedData);
+        return response;
+    }
+
+    // 2. Exclude Endpoint
+    @PostMapping("/exclude")
+    public Map<String, Object> excludeRecords(
+            @RequestParam("column") String column,
+            @RequestParam("value") String value) {
+
+        List<Map<String, String>> excluded = updatedData.stream()
+                .filter(row -> value.equals(row.get(column)))
+                .collect(Collectors.toList());
+
+        nonExcluded = updatedData.stream()
+                .filter(row -> !value.equals(row.get(column)))
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("excludedCount", excluded.size());
+        response.put("excludedRecords", excluded);
+        response.put("nonExcludedCount", nonExcluded.size());
+        response.put("nonExcludedRecords", nonExcluded);
+        return response;
+    }
+
+    // 3. Match Endpoint
+    @PostMapping("/match")
+    public Map<String, Object> matchFiles(
+            @RequestParam("file1") MultipartFile file1,
+            @RequestParam("file2") MultipartFile file2,
+            @RequestParam("column1") String column1,
+            @RequestParam("column2") String column2,
+            @RequestParam("matchType") String matchType) throws IOException {
+
+        List<Map<String, String>> data1 = (nonExcluded.isEmpty()) ? parseCsv(file1) : nonExcluded;
+        List<Map<String, String>> data2 = parseCsv(file2);
+
+        Map<String, List<Map<String, String>>> map2 = data2.stream()
+                .collect(Collectors.groupingBy(row -> row.get(column2)));
+
+        List<Map<String, Object>> matched = new ArrayList<>();
+        List<Map<String, String>> unmatched = new ArrayList<>();
+
+        for (Map<String, String> row1 : data1) {
+            String val = row1.get(column1);
+            List<Map<String, String>> matches = map2.get(val);
+
+            if (matches != null && !matches.isEmpty()) {
+                if ("1-1".equalsIgnoreCase(matchType)) {
+                    matched.add(Map.of("file1", row1, "file2", matches.get(0)));
+                } else {
+                    for (Map<String, String> m : matches) {
+                        matched.add(Map.of("file1", row1, "file2", m));
+                    }
+                }
+            } else {
+                unmatched.add(row1);
+            }
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("matchType", matchType);
+        response.put("matchedCount", matched.size());
+        response.put("matchedRecords", matched);
+        response.put("unmatchedCount", unmatched.size());
+        response.put("unmatchedRecords", unmatched);
+        return response;
+    }
+
+    // CSV Parser
+    private List<Map<String, String>> parseCsv(MultipartFile file) throws IOException {
+        List<Map<String, String>> records = new ArrayList<>();
+        try (Reader reader = new InputStreamReader(file.getInputStream())) {
+            Iterable<CSVRecord> csvRecords = CSVFormat.DEFAULT
+                    .withFirstRecordAsHeader()
+                    .parse(reader);
+            for (CSVRecord record : csvRecords) {
+                records.add(record.toMap());
+            }
+        }
+        return records;
+    }
+}
+
