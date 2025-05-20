@@ -1714,3 +1714,20 @@ public Map<String, Object> applyUpdates(Map<String, String> fromValues, Map<Stri
         "UpdatedRecordsFile2", updatedFile2
     );
 }
+
+
+
+
+private String resolvePlaceholders(String template, Map<String, String> rowData) {
+    Pattern pattern = Pattern.compile("\\{(\\w+)}");
+    Matcher matcher = pattern.matcher(template);
+    StringBuffer result = new StringBuffer();
+
+    while (matcher.find()) {
+        String colName = matcher.group(1);
+        String replacement = rowData.getOrDefault(colName, "");
+        matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+    }
+    matcher.appendTail(result);
+    return result.toString();
+}
