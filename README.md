@@ -1991,3 +1991,177 @@ public class CsvController {
         return response;
     }
 }
+
+
+
+
+
+
+
+
+package com.example.reconciliation;
+
+import org.springframework.http.ResponseEntity; import org.springframework.web.bind.annotation.*; import org.springframework.stereotype.Service; import org.springframework.boot.SpringApplication; import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+import java.io.; import java.nio.file.; import java.util.*; import java.util.stream.Collectors;
+
+@SpringBootApplication public class ReconciliationApp { public static void main(String[] args) { SpringApplication.run(ReconciliationApp.class, args); } }
+
+@RestController @RequestMapping("/api") class ReconciliationController {
+
+private final ReconciliationService service;
+
+public ReconciliationController(ReconciliationService service) {
+    this.service = service;
+}
+
+@GetMapping("/update")
+public ResponseEntity<Map<String, Object>> update(@RequestParam String filePath,
+                                                  @RequestParam String conditionColumn,
+                                                  @RequestParam String conditionValue,
+                                                  @RequestParam List<String> updateColumns,
+                                                  @RequestParam List<String> newValues,
+                                                  @RequestParam(required = false) String concatColumn) {
+    return ResponseEntity.ok(service.updateFile(filePath, conditionColumn, conditionValue, updateColumns, newValues, concatColumn));
+}
+
+@GetMapping("/exclude")
+public ResponseEntity<Map<String, Object>> exclude(@RequestParam String filePath,
+                                                   @RequestParam String column,
+                                                   @RequestParam String value) {
+    return ResponseEntity.ok(service.excludeFile(filePath, column, value));
+}
+
+@GetMapping("/match")
+public ResponseEntity<Map<String, Object>> match(@RequestParam String filePath1,
+                                                 @RequestParam String filePath2,
+                                                 @RequestParam String type,
+                                                 @RequestParam List<String> column1,
+                                                 @RequestParam List<String> column2) {
+    return ResponseEntity.ok(service.matchFiles(filePath1, filePath2, type, column1, column2));
+}
+
+}
+
+@Service class ReconciliationService {
+
+public Map<String, Object> updateFile(String filePath, String conditionColumn, String conditionValue,
+                                      List<String> updateColumns, List<String> newValues,
+                                      String concatColumn) {
+    List<Map<String, String>> records = readCsv(filePath);
+    List<Map<String, String>> updated = new ArrayList<>();
+
+    for (Map<String, String> record : records) {
+        if (record.get(conditionColumn).equals(conditionValue)) {
+            for (int i = 0; i < updateColumns.size(); i++) {
+                String col = updateColumns.get(i);
+                String newVal = newValues.get(i);
+                if ("concat".equalsIgnoreCase(newVal) && concatColumn != null) {
+                    newVal = record.get(col) + record.get(concatColumn);
+                }
+                record.put(col, newVal);
+            }
+            updated.add(record);
+        }
+    }
+
+    writeCsv(filePath, records);
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("updatedCount", updated.size());
+    response.put("updatedRecords", updated);
+    return response;
+}
+
+public Map<String, Object> excludeFile(String filePath, String column, String value) {
+    List<Map<String, String>> records = readCsv(filePath);
+    List<Map<String, String>> excluded = new ArrayList<>();
+    List<Map<String, String>> nonExcluded = new ArrayList<>();
+
+    for (Map<String, String> record : records) {
+        if (record.get(column).equals(value)) {
+            excluded.add(record);
+        } else {
+            nonExcluded.add(record);
+        }
+    }
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("excludedCount", excluded.size());
+    response.put("excludedRecords", excluded);
+    response.put("nonExcludedCount", nonExcluded.size());
+    response.put("nonExcludedRecords", nonExcluded);
+    return response;
+}
+
+public Map<String, Object> matchFiles(String filePath1, String filePath2, String type,
+                                      List<String> column1, List<String> column2) {
+    List<Map<String, String>> file1 = readCsv(filePath1);
+    List<Map<String, String>> file2 = readCsv(filePath2);
+
+    List<Map<String, String>> matched = new ArrayList<>();
+    List<Map<String, String>> unmatched = new ArrayList<>(file1);
+
+    for (Map<String, String> record1 : file1) {
+        boolean isMatched = false;
+        for (Map<String, String> record2 : file2) {
+            boolean allMatch = true;
+            for (int i = 0; i < column1.size(); i++) {
+                if (!record1.get(column1.get(i)).equals(record2.get(column2.get(i)))) {
+                    allMatch = false;
+                    break;
+                }
+            }
+            if (allMatch) {
+                matched.add(record1);
+                isMatched = true;
+                break;
+            }
+        }
+        if (isMatched) unmatched.remove(record1);
+    }
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("matchedCount", matched.size());
+    response.put("matchedRecords", matched);
+    response.put("unmatchedCount", unmatched.size());
+    response.put("unmatchedRecords", unmatched);
+    return response;
+}
+
+private List<Map<String, String>> readCsv(String filePath) {
+    List<Map<String, String>> records = new ArrayList<>();
+    try (BufferedReader reader = Files.newBufferedReader(Paths.get(filePath))) {
+        String[] headers = reader.readLine().split(",");
+        String line;
+        while ((line = reader.readLine()) != null) {
+            String[] values = line.split(",");
+            Map<String, String> record = new LinkedHashMap<>();
+            for (int i = 0; i < headers.length; i++) {
+                record.put(headers[i], i < values.length ? values[i] : "");
+            }
+            records.add(record);
+        }
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+    return records;
+}
+
+private void writeCsv(String filePath, List<Map<String, String>> records) {
+    if (records.isEmpty()) return;
+    try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath))) {
+        Set<String> headers = records.get(0).keySet();
+        writer.write(String.join(",", headers));
+        writer.newLine();
+        for (Map<String, String> record : records) {
+            List<String> row = headers.stream().map(record::get).collect(Collectors.toList());
+            writer.write(String.join(",", row));
+            writer.newLine();
+        }
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+
+}
