@@ -1846,3 +1846,148 @@ public class RecordController {
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+package com.example.csvprocessor;
+
+import org.springframework.web.bind.annotation.*;
+import org.springframework.core.io.ClassPathResource;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api")
+public class CsvController {
+
+    private List<Map<String, String>> readCsv(String filename) throws IOException {
+        InputStream inputStream = new ClassPathResource("static/files/" + filename).getInputStream();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+        String[] headers = reader.readLine().split(",");
+        List<Map<String, String>> data = new ArrayList<>();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            String[] values = line.split(",");
+            Map<String, String> row = new HashMap<>();
+            for (int i = 0; i < headers.length && i < values.length; i++) {
+                row.put(headers[i], values[i]);
+            }
+            data.add(row);
+        }
+        return data;
+    }
+
+    private String toCsv(List<Map<String, String>> rows) {
+        if (rows.isEmpty()) return "";
+        List<String> headers = new ArrayList<>(rows.get(0).keySet());
+        StringBuilder sb = new StringBuilder(String.join(",", headers)).append("\n");
+        for (Map<String, String> row : rows) {
+            sb.append(headers.stream().map(h -> row.getOrDefault(h, "")).collect(Collectors.joining(","))).append("\n");
+        }
+        return sb.toString();
+    }
+
+    @GetMapping("/update")
+    public Map<String, Object> update(
+            @RequestParam String file,
+            @RequestParam String column,
+            @RequestParam String oldValue,
+            @RequestParam String newValue
+    ) throws IOException {
+        List<Map<String, String>> data = readCsv(file);
+        int updated = 0;
+        for (Map<String, String> row : data) {
+            if (row.containsKey(column) && row.get(column).equals(oldValue)) {
+                row.put(column, newValue);
+                updated++;
+            }
+        }
+        Map<String, Object> response = new HashMap<>();
+        response.put("updatedCount", updated);
+        response.put("updatedRecords", data);
+        return response;
+    }
+
+    List<Map<String, String>> lastUpdated = new ArrayList<>();
+    List<Map<String, String>> lastNonExcluded = new ArrayList<>();
+
+    @GetMapping("/exclude")
+    public Map<String, Object> exclude(
+            @RequestParam String file,
+            @RequestParam String column,
+            @RequestParam String value
+    ) throws IOException {
+        lastUpdated = readCsv(file);
+        List<Map<String, String>> excluded = new ArrayList<>();
+        List<Map<String, String>> nonExcluded = new ArrayList<>();
+
+        for (Map<String, String> row : lastUpdated) {
+            if (row.getOrDefault(column, "").equals(value)) {
+                excluded.add(row);
+            } else {
+                nonExcluded.add(row);
+            }
+        }
+
+        lastNonExcluded = nonExcluded;
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("excludedCount", excluded.size());
+        response.put("nonExcludedCount", nonExcluded.size());
+        response.put("excludedRecords", excluded);
+        response.put("nonExcludedRecords", nonExcluded);
+        return response;
+    }
+
+    @GetMapping("/match/{type}")
+    public Map<String, Object> match(
+            @PathVariable String type,
+            @RequestParam String file1,
+            @RequestParam String file2,
+            @RequestParam String column1,
+            @RequestParam String column2
+    ) throws IOException {
+        List<Map<String, String>> data1 = lastNonExcluded.isEmpty() ? readCsv(file1) : lastNonExcluded;
+        List<Map<String, String>> data2 = readCsv(file2);
+
+        Map<String, Object> response = new HashMap<>();
+        List<Map<String, String>> matched = new ArrayList<>();
+        List<Map<String, String>> unmatched1 = new ArrayList<>();
+        List<Map<String, String>> unmatched2 = new ArrayList<>(data2);
+
+        if (type.equalsIgnoreCase("1-1")) {
+            for (Map<String, String> row1 : data1) {
+                boolean found = false;
+                for (Map<String, String> row2 : data2) {
+                    if (row1.get(column1).equals(row2.get(column2))) {
+                        matched.add(row1);
+                        unmatched2.remove(row2);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) unmatched1.add(row1);
+            }
+        }
+
+        // Extend logic for 1-many, many-1, many-many if needed
+
+        response.put("matchedCount", matched.size());
+        response.put("matchedRecords", matched);
+        response.put("unmatchedInFile1", unmatched1);
+        response.put("unmatchedInFile2", unmatched2);
+        return response;
+    }
+}
