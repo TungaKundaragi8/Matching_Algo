@@ -392,3 +392,172 @@ public class OracleToMongoMetadataApplication {
         SpringApplication.run(OracleToMongoMetadataApplication.class, args);
     }
 }
+
+
+
+
+
+// pom.xml
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>oracle-to-mongo-metadata</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-mongodb</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.oracle.database.jdbc</groupId>
+      <artifactId>ojdbc8</artifactId>
+      <version>19.3.0.0</version>
+    </dependency>
+  </dependencies>
+
+  <properties>
+    <java.version>17</java.version>
+  </properties>
+</project>
+
+// application.properties
+spring.datasource.url=jdbc:oracle:thin:@localhost:1521:xe
+spring.datasource.username=your_oracle_username
+spring.datasource.password=your_oracle_password
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+spring.data.mongodb.uri=mongodb://localhost:27017/metadata_db
+
+// model/TableMetadata.java
+package com.example.model;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import java.util.List;
+
+@Document("table_metadata")
+public class TableMetadata {
+    @Id
+    private String id;
+    private String tableName;
+    private List<ColumnMetadata> columns;
+
+    public static class ColumnMetadata {
+        private String columnName;
+        private String dataType;
+
+        public String getColumnName() { return columnName; }
+        public void setColumnName(String columnName) { this.columnName = columnName; }
+        public String getDataType() { return dataType; }
+        public void setDataType(String dataType) { this.dataType = dataType; }
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getTableName() { return tableName; }
+    public void setTableName(String tableName) { this.tableName = tableName; }
+    public List<ColumnMetadata> getColumns() { return columns; }
+    public void setColumns(List<ColumnMetadata> columns) { this.columns = columns; }
+}
+
+// repository/TableMetadataRepository.java
+package com.example.repository;
+
+import com.example.model.TableMetadata;
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+public interface TableMetadataRepository extends MongoRepository<TableMetadata, String> {
+}
+
+// service/MetadataService.java
+package com.example.service;
+
+import com.example.model.TableMetadata;
+import com.example.repository.TableMetadataRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import javax.sql.DataSource;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class MetadataService {
+    @Autowired
+    private DataSource dataSource;
+    @Autowired
+    private TableMetadataRepository repository;
+
+    public void extractMetadataAndSaveToMongo(String tableName) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            ResultSet columns = metaData.getColumns(null, null, tableName.toUpperCase(), null);
+            List<TableMetadata.ColumnMetadata> columnList = new ArrayList<>();
+
+            while (columns.next()) {
+                TableMetadata.ColumnMetadata column = new TableMetadata.ColumnMetadata();
+                column.setColumnName(columns.getString("COLUMN_NAME"));
+                column.setDataType(columns.getString("TYPE_NAME"));
+                columnList.add(column);
+            }
+
+            TableMetadata metadata = new TableMetadata();
+            metadata.setTableName(tableName.toUpperCase());
+            metadata.setColumns(columnList);
+            repository.save(metadata);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+// controller/MetadataController.java
+package com.example.controller;
+
+import com.example.service.MetadataService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/metadata")
+public class MetadataController {
+    @Autowired
+    private MetadataService metadataService;
+
+    @PostMapping("/extract")
+    public String extractMetadata(@RequestBody Map<String, String> body) {
+        String tableName = body.get("tableName");
+        if (tableName == null || tableName.isBlank()) {
+            return "Error: tableName is required in request body.";
+        }
+        metadataService.extractMetadataAndSaveToMongo(tableName);
+        return "Metadata for table '" + tableName + "' stored in MongoDB.";
+    }
+}
+
+// OracleToMongoMetadataApplication.java
+package com.example;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class OracleToMongoMetadataApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(OracleToMongoMetadataApplication.class, args);
+    }
+}
