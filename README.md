@@ -1,141 +1,177 @@
-<div class="admin-container">
-  <div class="card">
-    <h2>General Properties</h2>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Max Logon Attempts</label>
-        <input formControlName="maxLogonAttempts" type="text" />
-      </div>
+Sure! Here's your full updated Angular code for the behavior:
 
-      <div class="form-group">
-        <label>Select SCD Domain Name</label>
-        <select formControlName="domainName">
-          <option value="EURO_DOMAIN">EURO_DOMAIN</option>
-          <option value="SCD_DOMAIN">SCD_DOMAIN</option>
-        </select>
-      </div>
 
-      <div class="form-group">
-        <label>Report Service General Folder</label>
-        <input formControlName="reportFolder" type="text" />
-      </div>
+---
 
-      <div class="form-group">
-        <label>Purge Retention Count (for Logins)</label>
-        <input formControlName="purgeRetentionDays" type="text" />
-      </div>
+✅ GOAL:
+
+When you click hamburger menu, the white sidebar opens/closes.
+
+When you click "System Setup" inside the white sidebar, it should:
+
+Hide the white sidebar
+
+Show the black sidebar (i.e., systemSetupSideBarVisible).
+
+
+
+
+---
+
+✅ 1. layout.component.html
+
+<div class="layout">
+  <app-header (sidebarToggle)="onSidebarToggle()"></app-header>
+
+  <div class="main-area">
+    <!-- White Sidebar -->
+    <app-sidebar
+      *ngIf="isWhiteSideBarVisible"
+      [isCollapsed]="isCollapsed"
+      (systemSetupClicked)="onSystemSetupClick()"
+    ></app-sidebar>
+
+    <!-- Black Sidebar -->
+    <div *ngIf="isSystemSetUpSideBarVisible" class="sidebar-container">
+      <!-- your black sidebar content here -->
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Service Application Type Properties</h2>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Max Record Count</label>
-        <input formControlName="maxRecordCount" type="text" />
-      </div>
-
-      <div class="form-group">
-        <label>Max Execution Range</label>
-        <input formControlName="maxExecutionRange" type="text" />
-      </div>
-
-      <div class="form-group">
-        <label>Rows Per Page</label>
-        <input formControlName="rowsPerPage" type="text" />
-      </div>
-
-      <div class="form-group">
-        <label>Reserve Per Query</label>
-        <input formControlName="reservePerQuery" type="text" />
-      </div>
-
-      <div class="form-group">
-        <label>Items to Select</label>
-        <input formControlName="itemsToSelect" type="text" />
-      </div>
-
-      <div class="form-group">
-        <label>Selector Threshold</label>
-        <input formControlName="selectorThreshold" type="text" />
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Additional Properties</h2>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Select SCD Domain Name</label>
-        <select formControlName="domainName2">
-          <option value="EURO_DOMAIN">EURO_DOMAIN</option>
-          <option value="SCD_DOMAIN">SCD_DOMAIN</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Report Folder</label>
-        <input formControlName="reportFolder2" type="text" />
-      </div>
-
-      <div class="form-group">
-        <label>Purge Retention Days</label>
-        <input formControlName="purgeRetentionDays2" type="text" />
-      </div>
+    <div class="content-area">
+      <router-outlet></router-outlet>
     </div>
   </div>
 </div>
 
 
+---
 
-.admin-container {
-  padding: 20px;
-  max-width: 1200px;
-  margin: auto;
-  font-family: Arial, sans-serif;
-}
+✅ 2. layout.component.ts
 
-.card {
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 30px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
+import { Component } from '@angular/core';
 
-h2 {
-  margin-bottom: 20px;
-  font-size: 20px;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 10px;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-label {
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-
-input, select {
-  padding: 8px;
-  border: 1px solid #bbb;
-  border-radius: 5px;
-}import { ReactiveFormsModule } from '@angular/forms';
-
-@NgModule({
-  imports: [
-    ReactiveFormsModule,
-    // ...
-  ],
+@Component({
+  selector: 'app-layout',
+  templateUrl: './layout.component.html',
+  styleUrls: ['./layout.component.css']
 })
-export class AppModule {}
+export class LayoutComponent {
+  isCollapsed = true;
+  isWhiteSideBarVisible = true;
+  isSystemSetUpSideBarVisible = false;
+
+  onSidebarToggle() {
+    this.isCollapsed = !this.isCollapsed;
+    this.isWhiteSideBarVisible = !this.isWhiteSideBarVisible;
+    this.isSystemSetUpSideBarVisible = false;
+  }
+
+  onSystemSetupClick() {
+    this.isWhiteSideBarVisible = false;
+    this.isSystemSetUpSideBarVisible = true;
+  }
+}
+
+
+---
+
+✅ 3. header.component.html
+
+<span (click)="toggleSidebar()">
+  <svg xmlns="http://www.w3.org/2000/svg" height="25px" viewBox="0 0 960 960" width="25px" fill="#FFFFFF">
+    <path d="..."/>
+  </svg>
+</span>
+
+
+---
+
+✅ 4. header.component.ts
+
+import { Component, Output, EventEmitter } from '@angular/core';
+
+@Component({
+  selector: 'app-header',
+  templateUrl: './header.component.html',
+  styleUrls: ['./header.component.css']
+})
+export class HeaderComponent {
+  @Output() sidebarToggle = new EventEmitter<void>();
+
+  toggleSidebar(): void {
+    this.sidebarToggle.emit();
+  }
+}
+
+
+---
+
+✅ 5. sidebar.component.html (White Sidebar)
+
+<div class="main-sidebar-container" [ngClass]="{ 'collapsed': isCollapsed }">
+  <ul class="menu">
+    <li (click)="navigateToPath('inventory-configuration')">
+      Inventory Configuration
+    </li>
+
+    <li (click)="navigateToPath('system-setup')">
+      System Setup
+    </li>
+
+    <li (click)="navigateToPath('import-export')">
+      Import Export Manager
+    </li>
+
+    <li (click)="navigateToPath('data-direction')">
+      Data Directions
+    </li>
+  </ul>
+</div>
+
+
+---
+
+✅ 6. sidebar.component.ts
+
+import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
+
+@Component({
+  selector: 'app-sidebar',
+  templateUrl: './sidebar.component.html',
+  styleUrls: ['./sidebar.component.css']
+})
+export class SidebarComponent implements OnInit {
+  @Input() isCollapsed = false;
+  @Output() systemSetupClicked = new EventEmitter<void>();
+
+  constructor(private router: Router) {}
+
+  ngOnInit(): void {
+    this.router.events.subscribe(event => {
+      if (event instanceof NavigationEnd) {
+        // Add route-based logic if needed
+      }
+    });
+  }
+
+  navigateToPath(path: string): void {
+    if (path === 'system-setup') {
+      this.systemSetupClicked.emit();
+    } else {
+      this.router.navigateByUrl(path);
+    }
+  }
+}
+
+
+---
+
+✅ CSS (Optional)
+
+You can add styling to .main-sidebar-container and .sidebar-container in CSS files to match your desired appearance.
+
+
+---
+
+Would you like me to zip and send a working Angular demo for this too?
+
