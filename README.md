@@ -11,237 +11,139 @@ import { Component, Input, OnChanges } from '@angular/core';
 export class SidebarComponent implements OnChanges {
   @Input() isCollapsed: boolean = false;
 
-  selectedMenu: string | null = null;
-
-  toggleSubmenu(menu: string) {
-    this.selectedMenu = menu;
-  }
+  selectedMainMenu: string | null = null;
 
   ngOnChanges() {
     if (this.isCollapsed) {
-      this.selectedMenu = null; // auto-close submenu when main sidebar collapses
+      // When toggling, reset submenu
+      this.selectedMainMenu = null;
     }
   }
-}
-✅ sidebar.component.html
-html
-Copy code
-<!-- White Main Sidebar -->
-<div class="main-sidebar" [class.collapsed]="isCollapsed">
-  <ul>
-    <li (click)="toggleSubmenu('reference')">Reference Data</li>
-    <li (click)="toggleSubmenu('currency')">Currency</li>
-  </ul>
-</div>
-
-<!-- Green Submenu Sidebar -->
-<div class="submenu-sidebar" *ngIf="selectedMenu">
-  <ng-container [ngSwitch]="selectedMenu">
-    <div *ngSwitchCase="'reference'">Reference Panel Content</div>
-    <div *ngSwitchCase="'currency'">Currency Panel Content</div>
-  </ng-container>
-</div>
-✅ sidebar.component.css
-css
-Copy code
-.main-sidebar {
-  width: 250px;
-  background-color: white;
-  height: 100vh;
-  transition: width 0.3s;
-  float: left;
-  border-right: 1px solid #ccc;
-  padding: 1rem;
-}
-
-.main-sidebar.collapsed {
-  width: 80px;
-}
-
-.main-sidebar ul {
-  list-style: none;
-  padding: 0;
-}
-
-.main-sidebar li {
-  cursor: pointer;
-  padding: 0.5rem 0;
-  font-weight: bold;
-}
-
-.submenu-sidebar {
-  position: absolute;
-  left: 250px;
-  width: 250px;
-  height: 100vh;
-  background-color: lightgreen;
-  padding: 1rem;
-  transition: all 0.3s;
-}
-✅ Usage in layout.component.html
-html
-Copy code
-<app-header (sidebarToggle)="onSidebarToggle()"></app-header>
-
-<div class="main-area">
-  <app-sidebar [isCollapsed]="isCollapsed"></app-sidebar>
-  <div class="content-area">
-    <router-outlet></router-outlet>
-  </div>
-</div>
-✅ layout.component.ts
-ts
-Copy code
-export class LayoutComponent {
-  isCollapsed: boolean = false;
-
-  onSidebarToggle() {
-    this.isCollapsed = !this.isCollapsed;
-  }
-}
-Let me know if you want a working StackBlitz demo or want submenu to slide in/out instead of showing/hiding.
-
-
-
-
-
-
-sidebar.component.ts
-ts
-Copy code
-import { Component, Input, OnChanges } from '@angular/core';
-
-@Component({
-  selector: 'app-sidebar',
-  templateUrl: './sidebar.component.html',
-  styleUrls: ['./sidebar.component.css']
-})
-export class SidebarComponent implements OnChanges {
-  @Input() isCollapsed: boolean = false;
-  @Input() collapseMainSidebar!: () => void; // function passed from parent
-
-  selectedMenu: string | null = null;
 
   openSubmenu(menu: string) {
-    this.selectedMenu = menu;
-    if (this.collapseMainSidebar) {
-      this.collapseMainSidebar(); // close main sidebar
-    }
+    this.selectedMainMenu = menu;
+    this.isCollapsed = true; // Close main sidebar when menu is clicked
   }
 
-  ngOnChanges() {
-    if (!this.selectedMenu && !this.isCollapsed) {
-      // Main sidebar expanded -> reset submenu
-      this.selectedMenu = null;
-    }
+  backToMainMenu() {
+    this.selectedMainMenu = null;
+    this.isCollapsed = false; // Optionally re-open main sidebar on back
   }
 }
 🔸 sidebar.component.html
 html
 Copy code
-<!-- Main Sidebar (white) -->
-<div class="main-sidebar" [class.collapsed]="isCollapsed" *ngIf="!selectedMenu">
+<!-- MAIN SIDEBAR -->
+<div class="mainsidebar-container" *ngIf="!isCollapsed && !selectedMainMenu">
   <ul>
-    <li (click)="openSubmenu('system-setup')">System Setup</li>
-    <li (click)="openSubmenu('reference')">Reference Data</li>
-    <li (click)="openSubmenu('currency')">Currency</li>
+    <li (click)="openSubmenu('inventory')">Inventory Configuration</li>
+    <li (click)="openSubmenu('system')">System Setup</li>
+    <li (click)="openSubmenu('admin')">Admin</li>
+    <li (click)="openSubmenu('reports')">Reports</li>
   </ul>
 </div>
 
-<!-- Submenu Sidebar (green) -->
-<div class="submenu-sidebar" *ngIf="selectedMenu">
-  <button class="back-btn" (click)="selectedMenu = null">⬅ Back</button>
-  <ng-container [ngSwitch]="selectedMenu">
-    <div *ngSwitchCase="'system-setup'">System Setup Content</div>
-    <div *ngSwitchCase="'reference'">Reference Panel Content</div>
-    <div *ngSwitchCase="'currency'">Currency Panel Content</div>
+<!-- SUBMENU SIDEBAR -->
+<div class="sidebar-container" *ngIf="selectedMainMenu">
+  <button class="back-btn" (click)="backToMainMenu()">⬅ Back</button>
+  <ng-container [ngSwitch]="selectedMainMenu">
+    
+    <!-- Inventory Submenu -->
+    <div *ngSwitchCase="'inventory'">
+      <ul>
+        <li>Manage Dashboard</li>
+        <li>Task Automation</li>
+        <li>Recon Manager</li>
+      </ul>
+    </div>
+
+    <!-- System Setup Submenu -->
+    <div *ngSwitchCase="'system'">
+      <ul>
+        <li>Manage Company</li>
+        <li>Recon Master</li>
+      </ul>
+    </div>
+
+    <!-- Add more submenus similarly -->
+    
   </ng-container>
 </div>
 🔸 sidebar.component.css
 css
 Copy code
-.main-sidebar {
+.mainsidebar-container {
   width: 250px;
-  background-color: white;
+  background: white;
   height: 100vh;
-  float: left;
-  border-right: 1px solid #ccc;
   padding: 1rem;
-  transition: all 0.3s ease;
+  border-right: 1px solid #ccc;
 }
 
-.main-sidebar.collapsed {
-  width: 80px;
+.sidebar-container {
+  width: 250px;
+  background: lightgreen;
+  height: 100vh;
+  padding: 1rem;
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 100;
 }
 
-.main-sidebar ul {
+ul {
   list-style: none;
   padding: 0;
 }
 
-.main-sidebar li {
-  cursor: pointer;
+li {
   padding: 0.75rem 0;
+  cursor: pointer;
   font-weight: bold;
-}
-
-.submenu-sidebar {
-  position: absolute;
-  left: 0;
-  width: 250px;
-  height: 100vh;
-  background-color: lightgreen;
-  padding: 1rem;
-  transition: all 0.3s ease;
 }
 
 .back-btn {
   background: none;
   border: none;
+  color: black;
   font-size: 1rem;
-  cursor: pointer;
   margin-bottom: 1rem;
+  cursor: pointer;
 }
-🔸 layout.component.ts
+🔸 layout.component.ts (where toggle is)
 ts
 Copy code
 export class LayoutComponent {
-  isCollapsed: boolean = false;
+  isCollapsed = false;
 
   onSidebarToggle() {
     this.isCollapsed = !this.isCollapsed;
   }
-
-  collapseSidebar = () => {
-    this.isCollapsed = true;
-  };
 }
 🔸 layout.component.html
 html
 Copy code
 <app-header (sidebarToggle)="onSidebarToggle()"></app-header>
 
-<div class="main-area">
-  <app-sidebar [isCollapsed]="isCollapsed" [collapseMainSidebar]="collapseSidebar"></app-sidebar>
-  <div class="content-area">
-    <router-outlet></router-outlet>
-  </div>
-</div>
-✅ What this does:
-Clicking System Setup triggers openSubmenu() → which:
+<app-sidebar [isCollapsed]="isCollapsed"></app-sidebar>
 
-Calls collapseMainSidebar() to collapse the white sidebar.
+<router-outlet></router-outlet>
+✅ Summary of Behavior:
+Event	What happens
+🔘 Toggle Button	Toggles isCollapsed. Shows/hides main sidebar only.
+📄 Click "Inventory Configuration"	Main sidebar closes, green submenu opens with "Manage Dashboard", etc.
+📄 Click "System Setup"	Same – closes main, opens submenu.
+⬅ Back Button	Goes back to main sidebar.
 
-Displays the green submenu.
+Let me know if you’d like:
 
-Clicking ⬅ Back resets to the white sidebar view.
+Animations for transitions
 
-Would you like this with animations or using PrimeNG panels too?
+PrimeNG styling applied
 
+Routing on submenu clicks
 
-
-
-
+I can enhance it further!
 
 
 
