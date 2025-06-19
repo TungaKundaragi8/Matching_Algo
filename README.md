@@ -1,37 +1,55 @@
-Great! You want a two-column layout where:
+Thanks for the clarity! Here's exactly what you need:
 
-Left side has the table (AG Grid) showing Accounting Period Groups
-
-Right side shows:
-🔸 “Click on ➤ to view the accounting periods” (initially)
-🔸 Or dynamically shows related accounting periods later
-
-
-
----
-
-✅ Updated Layout Plan
-
-▶ Left Pane:
-
-Toolbar (Add, Delete, Refresh)
-
-AG Grid table
-
-
-▶ Right Pane:
-
-Message: "Click on ➤ to view the accounting periods"
-
+✅ Resizable horizontal split-pane layout (like your image)
+✅ Left pane: AG Grid for Accounting Period Groups
+✅ Right pane:
+  - AG Grid for Accounting Periods
+  - Initially shows message: “Click on ➤ to view the accounting periods.”
+✅ Both AG Grids have the same column layout
 
 
 ---
 
-✅ Updated accounting-period-groups.component.html
+✅ Final Working Solution
 
-<div class="main-split-layout">
-  <!-- Left Panel -->
-  <div class="left-panel">
+
+---
+
+🔧 1. Install angular-split and ag-grid
+
+npm install angular-split ag-grid-angular ag-grid-community
+
+
+---
+
+📁 app.module.ts
+
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { AngularSplitModule } from 'angular-split';
+import { AgGridModule } from 'ag-grid-angular';
+
+import { AppComponent } from './app.component';
+
+@NgModule({
+  declarations: [AppComponent],
+  imports: [
+    BrowserModule,
+    AngularSplitModule,
+    AgGridModule.withComponents([]),
+  ],
+  bootstrap: [AppComponent],
+})
+export class AppModule {}
+
+
+---
+
+🧩 app.component.html
+
+<as-split direction="horizontal" [gutterSize]="5">
+  <!-- LEFT PANE -->
+  <as-split-area [size]="50">
     <div class="toolbar">
       <button (click)="onAdd()">Add</button>
       <button (click)="onDelete()">Delete</button>
@@ -39,70 +57,100 @@ Message: "Click on ➤ to view the accounting periods"
     </div>
 
     <ag-grid-angular
-      style="width: 100%; height: 100%;"
+      style="width: 100%; height: calc(100% - 40px);"
       class="ag-theme-alpine"
-      [rowData]="rowData"
+      [rowData]="groups"
       [columnDefs]="columnDefs"
       rowSelection="single"
-      (rowClicked)="onRowClick($event)">
+      (rowClicked)="onGroupClick($event)">
     </ag-grid-angular>
-  </div>
+  </as-split-area>
 
-  <!-- Right Panel -->
-  <div class="right-panel">
+  <!-- RIGHT PANE -->
+  <as-split-area [size]="50">
     <ng-container *ngIf="!selectedGroup">
-      <div class="placeholder-text">
+      <div class="placeholder">
         Click on ➤ to view the accounting periods.
       </div>
     </ng-container>
 
     <ng-container *ngIf="selectedGroup">
-      <h3>Accounting Periods for: {{ selectedGroup.name }}</h3>
-      <!-- You can later load accounting period grid here -->
+      <ag-grid-angular
+        style="width: 100%; height: 100%;"
+        class="ag-theme-alpine"
+        [rowData]="periods"
+        [columnDefs]="columnDefs"
+        rowSelection="multiple">
+      </ag-grid-angular>
     </ng-container>
-  </div>
-</div>
+  </as-split-area>
+</as-split>
 
 
 ---
 
-✅ Add to accounting-period-groups.component.ts
+🧠 app.component.ts
 
-selectedGroup: any = null;
+import { Component } from '@angular/core';
 
-onRowClick(event: any) {
-  this.selectedGroup = event.data;
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+  styleUrls: ['./app.component.css']
+})
+export class AppComponent {
+  selectedGroup: any = null;
+
+  columnDefs = [
+    { headerName: '', field: 'expand', width: 40, cellRenderer: () => '➤' },
+    { headerName: 'Name', field: 'name', editable: true }
+  ];
+
+  groups = [
+    { name: 'Q1 2025' },
+    { name: 'Q2 2025' },
+    { name: 'Q3 2025' }
+  ];
+
+  periods: any[] = [];
+
+  onGroupClick(event: any) {
+    this.selectedGroup = event.data;
+
+    // Load dummy accounting periods
+    this.periods = [
+      { name: 'Jan 2025' },
+      { name: 'Feb 2025' },
+      { name: 'Mar 2025' }
+    ];
+  }
+
+  onAdd() {
+    alert('Add clicked');
+  }
+
+  onDelete() {
+    alert('Delete clicked');
+  }
+
+  onRefresh() {
+    alert('Refresh clicked');
+  }
 }
 
 
 ---
 
-✅ Add to accounting-period-groups.component.css
+🎨 app.component.css
 
-.main-split-layout {
-  display: flex;
-  height: 100%;
-  background-color: white;
-}
-
-.left-panel {
-  width: 50%;
-  padding: 16px;
-  border-right: 1px solid #ccc;
-  display: flex;
-  flex-direction: column;
-}
-
-.right-panel {
-  width: 50%;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+:host {
+  display: block;
+  height: 100vh;
 }
 
 .toolbar {
-  margin-bottom: 12px;
+  padding: 8px;
+  background-color: #f4f4f4;
 }
 
 .toolbar button {
@@ -110,19 +158,28 @@ onRowClick(event: any) {
   padding: 6px 12px;
 }
 
-.placeholder-text {
-  color: gray;
+.placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-style: italic;
+  font-size: 16px;
+  color: #999;
 }
 
 
 ---
 
-🔁 Optional Enhancement
+✅ Outcome:
 
-Later, you can add another ag-grid-angular inside the right panel to load accounting periods for the selected group.
+✔ Resizable split-pane (drag in middle)
+✔ Left: Groups table
+✔ Right: Same table structure (columns/rows) for periods
+✔ Initial message until group is selected
 
 
 ---
 
-Let me know if you want the right panel to load a dynamic grid for accounting periods or a form for details.
+Would you like the right grid to dynamically load from an API based on the selected group? I can also generate a full Angular + Spring Boot version if needed.
+
