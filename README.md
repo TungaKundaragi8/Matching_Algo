@@ -1,154 +1,142 @@
-sidebar.component.ts
-ts
-Copy code
-import { Component, Input, OnChanges } from '@angular/core';
+To build the "Accounting Period Groups" screen using Angular with AG Grid as shown in your image, here’s a working example including:
+
+Toolbar buttons (Add, Delete, Refresh)
+
+AG Grid table
+
+Sample data structure
+
+Proper layout for the white content panel
+
+
+
+---
+
+✅ 1. Install AG Grid
+
+If not installed:
+
+npm install ag-grid-community ag-grid-angular
+
+Import AG Grid in app.module.ts:
+
+import { AgGridModule } from 'ag-grid-angular';
+
+@NgModule({
+  imports: [
+    AgGridModule.withComponents([])
+  ]
+})
+export class AppModule { }
+
+
+---
+
+✅ 2. accounting-period-groups.component.ts
+
+import { Component } from '@angular/core';
 
 @Component({
-  selector: 'app-sidebar',
-  templateUrl: './sidebar.component.html',
-  styleUrls: ['./sidebar.component.css']
+  selector: 'app-accounting-period-groups',
+  templateUrl: './accounting-period-groups.component.html',
+  styleUrls: ['./accounting-period-groups.component.css']
 })
-export class SidebarComponent implements OnChanges {
-  @Input() isCollapsed: boolean = false;
+export class AccountingPeriodGroupsComponent {
+  rowData = [
+    { id: 'APG001', name: 'Q1 2025' },
+    { id: 'APG002', name: 'Q2 2025' },
+  ];
 
-  selectedMainMenu: string | null = null;
+  columnDefs = [
+    { headerName: 'ID', field: 'id', checkboxSelection: true },
+    { headerName: 'Name', field: 'name' }
+  ];
 
-  ngOnChanges() {
-    if (this.isCollapsed) {
-      // When toggling, reset submenu
-      this.selectedMainMenu = null;
-    }
+  onAdd() {
+    alert('Add button clicked');
   }
 
-  openSubmenu(menu: string) {
-    this.selectedMainMenu = menu;
-    this.isCollapsed = true; // Close main sidebar when menu is clicked
+  onDelete() {
+    alert('Delete button clicked');
   }
 
-  backToMainMenu() {
-    this.selectedMainMenu = null;
-    this.isCollapsed = false; // Optionally re-open main sidebar on back
+  onRefresh() {
+    alert('Refresh button clicked');
   }
 }
-🔸 sidebar.component.html
-html
-Copy code
-<!-- MAIN SIDEBAR -->
-<div class="mainsidebar-container" *ngIf="!isCollapsed && !selectedMainMenu">
-  <ul>
-    <li (click)="openSubmenu('inventory')">Inventory Configuration</li>
-    <li (click)="openSubmenu('system')">System Setup</li>
-    <li (click)="openSubmenu('admin')">Admin</li>
-    <li (click)="openSubmenu('reports')">Reports</li>
-  </ul>
+
+
+---
+
+✅ 3. accounting-period-groups.component.html
+
+<div class="content-container">
+  <div class="toolbar">
+    <button (click)="onAdd()">Add</button>
+    <button (click)="onDelete()">Delete</button>
+    <button (click)="onRefresh()">Refresh</button>
+  </div>
+
+  <ag-grid-angular
+    style="width: 100%; height: 400px;"
+    class="ag-theme-alpine"
+    [rowData]="rowData"
+    [columnDefs]="columnDefs"
+    rowSelection="multiple">
+  </ag-grid-angular>
+
+  <div class="accounting-periods-placeholder">
+    Click on ➤ to view the accounting periods.
+  </div>
 </div>
 
-<!-- SUBMENU SIDEBAR -->
-<div class="sidebar-container" *ngIf="selectedMainMenu">
-  <button class="back-btn" (click)="backToMainMenu()">⬅ Back</button>
-  <ng-container [ngSwitch]="selectedMainMenu">
-    
-    <!-- Inventory Submenu -->
-    <div *ngSwitchCase="'inventory'">
-      <ul>
-        <li>Manage Dashboard</li>
-        <li>Task Automation</li>
-        <li>Recon Manager</li>
-      </ul>
-    </div>
 
-    <!-- System Setup Submenu -->
-    <div *ngSwitchCase="'system'">
-      <ul>
-        <li>Manage Company</li>
-        <li>Recon Master</li>
-      </ul>
-    </div>
+---
 
-    <!-- Add more submenus similarly -->
-    
-  </ng-container>
-</div>
-🔸 sidebar.component.css
-css
-Copy code
-.mainsidebar-container {
-  width: 250px;
-  background: white;
-  height: 100vh;
-  padding: 1rem;
-  border-right: 1px solid #ccc;
+✅ 4. accounting-period-groups.component.css
+
+.content-container {
+  padding: 16px;
+  background-color: white;
+  height: 100%;
 }
 
-.sidebar-container {
-  width: 250px;
-  background: lightgreen;
-  height: 100vh;
-  padding: 1rem;
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 100;
+.toolbar {
+  margin-bottom: 12px;
 }
 
-ul {
-  list-style: none;
-  padding: 0;
+.toolbar button {
+  margin-right: 8px;
+  padding: 6px 12px;
 }
 
-li {
-  padding: 0.75rem 0;
-  cursor: pointer;
-  font-weight: bold;
+.accounting-periods-placeholder {
+  margin-top: 20px;
+  color: gray;
+  font-style: italic;
 }
 
-.back-btn {
-  background: none;
-  border: none;
-  color: black;
-  font-size: 1rem;
-  margin-bottom: 1rem;
-  cursor: pointer;
-}
-🔸 layout.component.ts (where toggle is)
-ts
-Copy code
-export class LayoutComponent {
-  isCollapsed = false;
 
-  onSidebarToggle() {
-    this.isCollapsed = !this.isCollapsed;
-  }
-}
-🔸 layout.component.html
-html
-Copy code
-<app-header (sidebarToggle)="onSidebarToggle()"></app-header>
+---
 
-<app-sidebar [isCollapsed]="isCollapsed"></app-sidebar>
+✅ 5. Routing
 
-<router-outlet></router-outlet>
-✅ Summary of Behavior:
-Event	What happens
-🔘 Toggle Button	Toggles isCollapsed. Shows/hides main sidebar only.
-📄 Click "Inventory Configuration"	Main sidebar closes, green submenu opens with "Manage Dashboard", etc.
-📄 Click "System Setup"	Same – closes main, opens submenu.
-⬅ Back Button	Goes back to main sidebar.
+Make sure your route is configured in app-routing.module.ts:
 
-Let me know if you’d like:
-
-Animations for transitions
-
-PrimeNG styling applied
-
-Routing on submenu clicks
-
-I can enhance it further!
+{ path: 'accounting-period-groups', component: AccountingPeriodGroupsComponent }
 
 
+---
+
+✅ 6. Usage in Sidebar Menu
+
+In your sidebar menu:
+
+<a routerLink="/accounting-period-groups">Accounting Period Groups</a>
 
 
+---
 
+If you want dynamic interaction with the right side (like loading "Accounting Periods" when selecting a group), I can also help you add a master-detail layout or two-column layout.
 
-
-
+Would you like that functionality too?
