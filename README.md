@@ -1,104 +1,104 @@
-To build the "Accounting Period Groups" screen using Angular with AG Grid as shown in your image, here’s a working example including:
+Great! You want a two-column layout where:
 
-Toolbar buttons (Add, Delete, Refresh)
+Left side has the table (AG Grid) showing Accounting Period Groups
+
+Right side shows:
+🔸 “Click on ➤ to view the accounting periods” (initially)
+🔸 Or dynamically shows related accounting periods later
+
+
+
+---
+
+✅ Updated Layout Plan
+
+▶ Left Pane:
+
+Toolbar (Add, Delete, Refresh)
 
 AG Grid table
 
-Sample data structure
 
-Proper layout for the white content panel
+▶ Right Pane:
 
+Message: "Click on ➤ to view the accounting periods"
 
-
----
-
-✅ 1. Install AG Grid
-
-If not installed:
-
-npm install ag-grid-community ag-grid-angular
-
-Import AG Grid in app.module.ts:
-
-import { AgGridModule } from 'ag-grid-angular';
-
-@NgModule({
-  imports: [
-    AgGridModule.withComponents([])
-  ]
-})
-export class AppModule { }
 
 
 ---
 
-✅ 2. accounting-period-groups.component.ts
+✅ Updated accounting-period-groups.component.html
 
-import { Component } from '@angular/core';
+<div class="main-split-layout">
+  <!-- Left Panel -->
+  <div class="left-panel">
+    <div class="toolbar">
+      <button (click)="onAdd()">Add</button>
+      <button (click)="onDelete()">Delete</button>
+      <button (click)="onRefresh()">Refresh</button>
+    </div>
 
-@Component({
-  selector: 'app-accounting-period-groups',
-  templateUrl: './accounting-period-groups.component.html',
-  styleUrls: ['./accounting-period-groups.component.css']
-})
-export class AccountingPeriodGroupsComponent {
-  rowData = [
-    { id: 'APG001', name: 'Q1 2025' },
-    { id: 'APG002', name: 'Q2 2025' },
-  ];
-
-  columnDefs = [
-    { headerName: 'ID', field: 'id', checkboxSelection: true },
-    { headerName: 'Name', field: 'name' }
-  ];
-
-  onAdd() {
-    alert('Add button clicked');
-  }
-
-  onDelete() {
-    alert('Delete button clicked');
-  }
-
-  onRefresh() {
-    alert('Refresh button clicked');
-  }
-}
-
-
----
-
-✅ 3. accounting-period-groups.component.html
-
-<div class="content-container">
-  <div class="toolbar">
-    <button (click)="onAdd()">Add</button>
-    <button (click)="onDelete()">Delete</button>
-    <button (click)="onRefresh()">Refresh</button>
+    <ag-grid-angular
+      style="width: 100%; height: 100%;"
+      class="ag-theme-alpine"
+      [rowData]="rowData"
+      [columnDefs]="columnDefs"
+      rowSelection="single"
+      (rowClicked)="onRowClick($event)">
+    </ag-grid-angular>
   </div>
 
-  <ag-grid-angular
-    style="width: 100%; height: 400px;"
-    class="ag-theme-alpine"
-    [rowData]="rowData"
-    [columnDefs]="columnDefs"
-    rowSelection="multiple">
-  </ag-grid-angular>
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <ng-container *ngIf="!selectedGroup">
+      <div class="placeholder-text">
+        Click on ➤ to view the accounting periods.
+      </div>
+    </ng-container>
 
-  <div class="accounting-periods-placeholder">
-    Click on ➤ to view the accounting periods.
+    <ng-container *ngIf="selectedGroup">
+      <h3>Accounting Periods for: {{ selectedGroup.name }}</h3>
+      <!-- You can later load accounting period grid here -->
+    </ng-container>
   </div>
 </div>
 
 
 ---
 
-✅ 4. accounting-period-groups.component.css
+✅ Add to accounting-period-groups.component.ts
 
-.content-container {
-  padding: 16px;
-  background-color: white;
+selectedGroup: any = null;
+
+onRowClick(event: any) {
+  this.selectedGroup = event.data;
+}
+
+
+---
+
+✅ Add to accounting-period-groups.component.css
+
+.main-split-layout {
+  display: flex;
   height: 100%;
+  background-color: white;
+}
+
+.left-panel {
+  width: 50%;
+  padding: 16px;
+  border-right: 1px solid #ccc;
+  display: flex;
+  flex-direction: column;
+}
+
+.right-panel {
+  width: 50%;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .toolbar {
@@ -110,8 +110,7 @@ export class AccountingPeriodGroupsComponent {
   padding: 6px 12px;
 }
 
-.accounting-periods-placeholder {
-  margin-top: 20px;
+.placeholder-text {
   color: gray;
   font-style: italic;
 }
@@ -119,24 +118,11 @@ export class AccountingPeriodGroupsComponent {
 
 ---
 
-✅ 5. Routing
+🔁 Optional Enhancement
 
-Make sure your route is configured in app-routing.module.ts:
-
-{ path: 'accounting-period-groups', component: AccountingPeriodGroupsComponent }
+Later, you can add another ag-grid-angular inside the right panel to load accounting periods for the selected group.
 
 
 ---
 
-✅ 6. Usage in Sidebar Menu
-
-In your sidebar menu:
-
-<a routerLink="/accounting-period-groups">Accounting Period Groups</a>
-
-
----
-
-If you want dynamic interaction with the right side (like loading "Accounting Periods" when selecting a group), I can also help you add a master-detail layout or two-column layout.
-
-Would you like that functionality too?
+Let me know if you want the right panel to load a dynamic grid for accounting periods or a form for details.
